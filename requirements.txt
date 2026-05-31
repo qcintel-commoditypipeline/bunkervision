@@ -1,4 +1,5 @@
 flask>=3.0
+gunicorn>=21.0
 duckdb>=0.10
 pandas>=2.2
 plotly>=5.20

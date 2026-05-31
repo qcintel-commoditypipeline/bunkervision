@@ -1,0 +1,25 @@
+[Unit]
+Description=BunkerVision AIS Demand Tracker
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/opt/scripts/bunkervision
+EnvironmentFile=/opt/scripts/bunkervision/.env
+# Single worker ONLY (in-process AIS/detector threads); concurrency via --threads.
+# gthread worker so the long-lived /stream SSE endpoint doesn't block other requests.
+ExecStart=/opt/scripts/venv/bin/gunicorn \
+    --workers 1 \
+    --threads 16 \
+    --worker-class gthread \
+    --timeout 120 \
+    --graceful-timeout 30 \
+    --bind 127.0.0.1:5100 \
+    wsgi:app
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

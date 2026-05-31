@@ -1172,7 +1172,20 @@ def _initial_load():
         logger.warning(f"Port stats load failed (non-fatal): {e}")
 
 
-if __name__ == "__main__":
+def start_background() -> None:
+    """Initialise the DB and launch the AIS listener, event detector, and
+    scheduler. Idempotent and safe to call once per process.
+
+    Shared by the dev server (``python app.py``) and the production gunicorn
+    entrypoint (``wsgi.py``). IMPORTANT: these are in-process threads, so the
+    app MUST run as a SINGLE process/worker — running multiple gunicorn workers
+    would open duplicate AIS streams and double-write the DB. Use gunicorn
+    ``--threads`` (not ``--workers``) for request concurrency.
+    """
+    if getattr(start_background, "_started", False):
+        return
+    start_background._started = True
+
     # Initialise DB schema
     db.get_conn()
 
@@ -1200,4 +1213,7 @@ if __name__ == "__main__":
         except Exception:
             pass
 
+
+if __name__ == "__main__":
+    start_background()
     app.run(host=HOST, port=PORT, debug=DEBUG, use_reloader=False)
