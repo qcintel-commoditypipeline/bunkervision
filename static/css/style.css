@@ -372,6 +372,16 @@ input:focus-visible, select:focus-visible,
   gap: var(--s3);
 }
 
+/* Headline hero + KPI layout.
+   Mobile-first: hero full-width on top, KPIs 2-up beneath it.
+   Desktop (>=768px, see media query): hero tall on the left, KPIs 2x2 right. */
+.headline-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s3);
+}
+.headline-grid > .hero-card { grid-column: 1 / -1; }
+
 /* ── KPI cards ────────────────────────────────────────────────────────────────── */
 .kpi-card {
   background: var(--surface);
@@ -771,12 +781,17 @@ table.dataTable thead th { cursor: pointer; }
   }
   .app-content > .container-fluid { padding-left: var(--s3); padding-right: var(--s3); }
 
-  .hero-number { font-size: 2.2rem; }
+  /* Scale the hero number with the viewport so it never clips on a phone. */
+  .hero-number { font-size: clamp(1.9rem, 8.5vw, 2.4rem); }
   .hero-card { padding: var(--s4); }
 }
 
 @media (min-width: 768px) {
   .app-bottom-nav { display: none; }
+
+  /* Desktop headline: hero spans both KPI rows on the left, KPIs 2x2 right. */
+  .headline-grid { grid-template-columns: 1.4fr 1fr 1fr; }
+  .headline-grid > .hero-card { grid-column: 1; grid-row: 1 / span 2; }
 }
 
 /* Prevent horizontal overflow from wide content/tables on small screens */
