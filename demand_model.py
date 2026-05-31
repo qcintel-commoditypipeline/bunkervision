@@ -313,7 +313,7 @@ def demand_chart_data(port: str = "singapore") -> dict:
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
         barmode="overlay",
         dragmode=False,
-        yaxis=dict(title=None, ticksuffix=" Mt"),
+        yaxis=dict(title=None, ticksuffix=" Mt", hoverformat=".2f"),
         xaxis=dict(type="date", tickformat="%b %Y"),
         xaxis_title="",
     )
@@ -465,7 +465,7 @@ def fuel_split_chart_data(port: str = "singapore") -> dict:
         margin=dict(l=60, r=20, t=30, b=40),
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
         barmode="stack",
-        yaxis_title="Volume (mt)",
+        yaxis=dict(title="Volume (mt)", hoverformat=",.0f"),
         xaxis_title="",
     )
 
