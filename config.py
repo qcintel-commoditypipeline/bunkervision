@@ -53,7 +53,8 @@ DEFAULT_PUMP_RATE_MT_MIN = 3.5
 # separately). Real Singapore bunkering runs ~3-12h; sub-30-min "events" are
 # almost entirely AIS noise / brief drifts and are ~89% of events but only ~2%
 # of modelled volume. Default False = legacy behaviour (count everything).
-EVENT_QUALITY_FILTER_ENABLED = False
+# Enabled 2026-05-31: makes event count + avg stem realistic; total moves ~-1.6%.
+EVENT_QUALITY_FILTER_ENABLED = True
 
 # Minimum plausible bunkering duration (minutes) for an event to contribute to
 # VOLUME aggregation when EVENT_QUALITY_FILTER_ENABLED is True.
