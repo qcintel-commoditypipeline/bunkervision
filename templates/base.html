@@ -122,6 +122,10 @@ const PLY_CFG = {
   responsive: true,
   displayModeBar: false,
   displaylogo: false,
+  scrollZoom: false,
+  doubleClick: false,
+  editable: false,
+  staticPlot: false,   // keep hover tooltips, but no drag/zoom/pan
 };
 
 const CURRENT_PORT = {{ (current_port | default('singapore')) | tojson }};
@@ -132,12 +136,17 @@ const PLY_FONT = 'Inter, system-ui, -apple-system, sans-serif';
 // Plotly default Arial) so tooltips match the rest of the UI.
 function normalizeFig(fig) {
   const L = fig.layout = fig.layout || {};
-  L.font = Object.assign({ family: PLY_FONT, color: '#c9d1d9' }, L.font || {});
+  L.font = Object.assign({ family: PLY_FONT, color: '#8b949e' }, L.font || {});
   L.hoverlabel = Object.assign(
     { bgcolor: '#161b22', bordercolor: '#30363d', font: {} },
     L.hoverlabel || {}
   );
   L.hoverlabel.font = Object.assign({ family: PLY_FONT, size: 12, color: '#e6edf3' }, L.hoverlabel.font || {});
+  // Calm, frameless charts: no drag-zoom/pan, transparent so they blend into
+  // the page instead of sitting in a nested box.
+  L.dragmode = false;
+  L.plot_bgcolor = 'rgba(0,0,0,0)';
+  L.paper_bgcolor = 'rgba(0,0,0,0)';
   return fig;
 }
 

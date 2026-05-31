@@ -357,19 +357,19 @@ input:focus-visible, select:focus-visible,
 
 /* ═══ SURFACES / CARDS ══════════════════════════════════════════════════════════ */
 .card {
-  background: linear-gradient(180deg, var(--surface-2), var(--surface));
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  box-shadow: var(--shadow-sm);
+  background: var(--surface);
+  border: none;
+  border-radius: var(--r-lg);
+  box-shadow: none;
 }
-.card-body { padding: var(--s4); }
+.card-body { padding: var(--s5); }
 
 /* ── Stat grid utility — Bootstrap-free responsive card layout ────────────────── */
 /* Drop KPI/stat cards straight in; auto-fits columns and reflows on mobile. */
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: var(--s3);
+  gap: var(--s4);
 }
 
 /* Headline hero + KPI layout.
@@ -378,23 +378,21 @@ input:focus-visible, select:focus-visible,
 .headline-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--s3);
+  gap: var(--s4);
 }
 .headline-grid > .hero-card { grid-column: 1 / -1; }
 
 /* ── KPI cards ────────────────────────────────────────────────────────────────── */
 .kpi-card {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--r-md);
-  padding: var(--s4);
+  padding: var(--s4) var(--s5);
   height: 100%;
-  box-shadow: var(--shadow-sm);
-  transition: border-color .2s ease, transform .2s ease;
+  box-shadow: none;
 }
-.kpi-card:hover { border-color: #3d4651; transform: translateY(-1px); }
-.kpi-card.kpi-accent-pos { border-left: 3px solid var(--pos); }
-.kpi-card.kpi-accent-neg { border-left: 3px solid var(--neg); }
+.kpi-card.kpi-accent-pos { box-shadow: inset 3px 0 0 var(--pos); }
+.kpi-card.kpi-accent-neg { box-shadow: inset 3px 0 0 var(--neg); }
 .kpi-label {
   font-size: var(--t-xs);
   color: var(--muted);
@@ -425,11 +423,11 @@ input:focus-visible, select:focus-visible,
   background:
     radial-gradient(420px 220px at 100% 0%, rgba(88,166,255,0.10), transparent 70%),
     linear-gradient(180deg, var(--surface-2), var(--surface));
-  border: 1px solid var(--border);
+  border: none;
   border-radius: var(--r-lg);
   padding: var(--s5) var(--s5);
   height: 100%;
-  box-shadow: var(--shadow-md);
+  box-shadow: none;
 }
 .hero-card.hero-accent-pos { border-left: 4px solid var(--pos); }
 .hero-card.hero-accent-neg { border-left: 4px solid var(--neg); }
