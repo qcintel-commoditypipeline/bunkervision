@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{% block title %}BunkerVision{% endblock %}</title>
+  {# Anchor favicon (the little Chrome-tab icon) #}
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2358a6ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='5' r='3'/><line x1='12' y1='22' x2='12' y2='8'/><path d='M5 12H2a10 10 0 0 0 20 0h-3'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
@@ -37,7 +39,10 @@
       {# Port selector — custom dropdown driven by ui.js #}
       <div class="port-select" data-port-select>
         <button class="port-select-btn" type="button" data-port-toggle aria-haspopup="true" aria-expanded="false">
-          <span class="port-pin">&#128205;</span>
+          <svg class="port-pin" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="2.5"/>
+          </svg>
           <span class="port-current">{{ ports[current_port | default('singapore')].name if ports else 'Singapore' }}</span>
           <span class="port-caret" aria-hidden="true">&#9662;</span>
         </button>
@@ -47,15 +52,21 @@
             {% for key, p in ports.items() if p.data_source %}
             <a class="port-menu-item {% if key == current_port %}active{% endif %}" role="menuitem"
                href="/?port={{ key }}">
-              <span>{{ p.name }}</span>
+              <span class="port-dot port-dot-data" title="Official data + AIS"></span>
+              <span class="port-menu-name">{{ p.name }}</span>
               {% if p.data_frequency == 'quarterly' %}<span class="port-menu-tag">Qtrly</span>{% endif %}
+              <span class="port-check" aria-hidden="true">&#10003;</span>
             </a>
             {% endfor %}
             <div class="port-menu-divider"></div>
             <div class="port-menu-header">AIS only</div>
             {% for key, p in ports.items() if not p.data_source %}
             <a class="port-menu-item {% if key == current_port %}active{% endif %}" role="menuitem"
-               href="/?port={{ key }}">{{ p.name }}</a>
+               href="/?port={{ key }}">
+              <span class="port-dot port-dot-ais" title="AIS tracking only"></span>
+              <span class="port-menu-name">{{ p.name }}</span>
+              <span class="port-check" aria-hidden="true">&#10003;</span>
+            </a>
             {% endfor %}
           {% endif %}
         </div>
