@@ -23,12 +23,15 @@
 <div class="headline-grid mb-4">
   <!-- Hero nowcast -->
   <div class="hero-card" id="hero-nowcast">
-    <div class="hero-label">Current-Month Nowcast</div>
-    <div class="hero-number"><span id="hero-proj">—</span></div>
-    <div class="hero-sub" id="hero-proj-sub">projecting full-month demand</div>
-    <div class="mt-3">
-      <span class="verdict-pill verdict-neu" id="hero-verdict">awaiting data</span>
+    <div class="hero-main">
+      <div class="hero-label">Current-Month Nowcast</div>
+      <div class="hero-number"><span id="hero-proj">—</span></div>
+      <div class="hero-sub" id="hero-proj-sub">projecting full-month demand</div>
+      <div class="mt-3">
+        <span class="verdict-pill verdict-neu" id="hero-verdict">awaiting data</span>
+      </div>
     </div>
+    <div class="hero-spark" id="hero-spark"></div>
   </div>
   <!-- Supporting KPIs -->
   <div class="kpi-card">
@@ -82,13 +85,20 @@
 <div class="stat-grid mb-4" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));">
   <div class="card" style="grid-column:span 1;min-width:0;">
     <div class="card-body">
-      <div class="section-label">
-        {% if port_cfg.has_registry %}
-          {{ port_cfg.name | upper }} BUNKER SALES — AIS PROJECTED VS OFFICIAL
-        {% else %}
-          {{ port_cfg.name | upper }} BUNKER SALES{% if port_cfg.data_frequency == 'quarterly' %} (QUARTERLY){% endif %}
-          {% if not port_cfg.data_source %}<span class="text-muted" style="font-size:var(--t-xs)"> — AIS only, no official data</span>{% endif %}
-        {% endif %}
+      <div class="chart-head">
+        <div class="section-label mb-0">
+          {% if port_cfg.has_registry %}
+            {{ port_cfg.name | upper }} BUNKER SALES — AIS PROJECTED VS OFFICIAL
+          {% else %}
+            {{ port_cfg.name | upper }} BUNKER SALES{% if port_cfg.data_frequency == 'quarterly' %} (QUARTERLY){% endif %}
+            {% if not port_cfg.data_source %}<span class="text-muted" style="font-size:var(--t-xs)"> — AIS only, no official data</span>{% endif %}
+          {% endif %}
+        </div>
+        <div class="seg" id="demand-window">
+          <button class="seg-btn" data-window="1y">1Y</button>
+          <button class="seg-btn seg-active" data-window="3y">3Y</button>
+          <button class="seg-btn" data-window="all">All</button>
+        </div>
       </div>
       <div id="demand-chart" style="min-height:380px;width:100%;"></div>
     </div>
@@ -378,8 +388,23 @@ async function refreshEventFeed() {
 }
 
 // ── Charts ─────────────────────────────────────────────────────────────────────
-loadChart('demand-chart', `/api/demand_chart?port=${CURRENT_PORT}`);
-loadChart('fuel-split-chart', `/api/fuel_split_chart?port=${CURRENT_PORT}`);
+let chartWindow = '3y';
+function loadDemandCharts() {
+  loadChart('demand-chart', `/api/demand_chart?port=${CURRENT_PORT}&window=${chartWindow}`);
+  loadChart('fuel-split-chart', `/api/fuel_split_chart?port=${CURRENT_PORT}&window=${chartWindow}`);
+}
+loadDemandCharts();
+loadChart('hero-spark', `/api/demand_spark?port=${CURRENT_PORT}`);
+
+// Window toggle (1Y / 3Y / All) — controls both headline charts
+document.querySelectorAll('#demand-window .seg-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    chartWindow = btn.dataset.window;
+    document.querySelectorAll('#demand-window .seg-btn')
+      .forEach(b => b.classList.toggle('seg-active', b === btn));
+    loadDemandCharts();
+  });
+});
 
 // Resize Plotly charts when the map tab pills change the layout / on tab show
 document.querySelectorAll('#ops-tabs button[data-bs-toggle="pill"]').forEach(b => {
@@ -396,8 +421,8 @@ setInterval(refreshKPIs, 30_000);
 setInterval(refreshEventFeed, 20_000);
 setInterval(refreshAccuracy, 300_000);
 setInterval(() => {
-  loadChart('demand-chart', `/api/demand_chart?port=${CURRENT_PORT}`);
-  loadChart('fuel-split-chart', `/api/fuel_split_chart?port=${CURRENT_PORT}`);
+  loadDemandCharts();
+  loadChart('hero-spark', `/api/demand_spark?port=${CURRENT_PORT}`);
 }, 120_000);
 </script>
 {% endblock %}

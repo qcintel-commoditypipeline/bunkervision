@@ -269,7 +269,16 @@ def _monthly_avg_price(port: str, grade: str = "VLSFO") -> dict[str, float]:
 _MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
 
 
-def demand_chart_data(port: str = "singapore") -> dict:
+def _window_periods(window: str, frequency: str) -> int | None:
+    """Translate a UI window token (1y/3y/5y/all) into a number of trailing
+    periods for the given data frequency. Returns None for 'all' (no limit)."""
+    if window in (None, "all"):
+        return None
+    years = {"1y": 1, "3y": 3, "5y": 5}.get(window, 3)
+    return years * (4 if frequency == "quarterly" else 12)
+
+
+def demand_chart_data(port: str = "singapore", window: str = "3y") -> dict:
     """
     Plotly figure: official bars (grey) overlaid with provisional estimates (amber)
     + current-month forecast (green/red) + seasonal avg line.
@@ -302,12 +311,12 @@ def demand_chart_data(port: str = "singapore") -> dict:
     port_cfg  = PORTS.get(port, {})
     frequency = port_cfg.get("data_frequency", "monthly")
 
-    # Headline focuses on the recent window so bars stay legible — the full
-    # multi-year history crammed onto a phone-width chart is what made it
-    # unreadable. ~3y of months / ~4y of quarters.
-    if not df.empty:
-        _window = 16 if frequency == "quarterly" else 36
-        df = df.tail(_window).reset_index(drop=True)
+    # Headline focuses on the recent window so bars stay legible (the full
+    # multi-year history crammed onto a phone-width chart is unreadable).
+    # Window is user-selectable (1y/3y/all) via the chart toggle.
+    _n = _window_periods(window, frequency)
+    if _n and not df.empty:
+        df = df.tail(_n).reset_index(drop=True)
 
     _BAR_W_MS = 20 * 24 * 3600 * 1000  # 20-day bar width in ms (date-axis bars need explicit width)
 
@@ -433,10 +442,71 @@ def demand_chart_data(port: str = "singapore") -> dict:
     return fig.to_dict()
 
 
-def fuel_split_chart_data(port: str = "singapore") -> dict:
+def demand_sparkline_data(port: str = "singapore") -> dict:
+    """Minimal, axis-less sparkline of the last ~12 months of total demand plus
+    the live current-month forecast — rendered inside the hero card so it earns
+    its space."""
+    import plotly.graph_objects as go
+    from datetime import date
+
+    df = db.query_df("""
+        SELECT month,
+            COALESCE(
+                MAX(CASE WHEN fuel_type = 'TOTAL' THEN volume_mt END),
+                SUM(CASE WHEN fuel_type != 'TOTAL' THEN volume_mt END)
+            ) AS volume_mt
+        FROM port_bunker_sales
+        WHERE port = ?
+        GROUP BY month HAVING volume_mt > 0
+        ORDER BY month
+    """, [_db_port(port)])
+    if df.empty and port == "singapore":
+        df = db.query_df("""
+            SELECT month, SUM(volume_mt) AS volume_mt
+            FROM mpa_monthly WHERE fuel_type != 'TOTAL'
+            GROUP BY month ORDER BY month
+        """)
+
+    layout = dict(
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=0, r=0, t=6, b=0),
+        showlegend=False, dragmode=False, hovermode="x",
+        xaxis=dict(visible=False), yaxis=dict(visible=False),
+    )
+    fig = go.Figure(layout=layout)
+    if df.empty:
+        return fig.to_dict()
+
+    df = df.tail(12).reset_index(drop=True)
+    xs = [str(m)[:7] for m in df["month"]]
+    ys = [float(v) / 1e6 for v in df["volume_mt"]]
+
+    est = running_demand_estimate(port) if PORTS.get(port, {}).get("has_registry") else {}
+    fc  = est.get("projected_month_mt")
+
+    fig.add_trace(go.Scatter(
+        x=xs, y=ys, mode="lines", line=dict(color="#58a6ff", width=2),
+        fill="tozeroy", fillcolor="rgba(88,166,255,0.10)",
+        hovertemplate="%{x}: %{y:.2f} Mt<extra></extra>",
+    ))
+    if fc:
+        colour = "#3fb950" if (est.get("pct_vs_seasonal") or 0) >= 0 else "#f85149"
+        fig.add_trace(go.Scatter(
+            x=[xs[-1], date.today().strftime("%Y-%m")], y=[ys[-1], fc / 1e6],
+            mode="lines+markers", line=dict(color=colour, width=2, dash="dot"),
+            marker=dict(size=6, color=colour),
+            hovertemplate="%{x} forecast: %{y:.2f} Mt<extra></extra>",
+        ))
+    vals = ys + ([fc / 1e6] if fc else [])
+    fig.update_yaxes(range=[min(vals) * 0.9, max(vals) * 1.05])
+    return fig.to_dict()
+
+
+def fuel_split_chart_data(port: str = "singapore", window: str = "3y") -> dict:
     """
     Plotly stacked bar: official MPA fuel-type breakdown per month.
-    Grades: VLSFO / HSFO / LSMGO / MGO / other.
+    Grades: VLSFO / HSFO / LSMGO / MGO / other. Grades that are negligible over
+    the visible window (<0.5% share) are dropped to keep the legend readable.
     """
     import plotly.graph_objects as go
 
@@ -487,9 +557,21 @@ def fuel_split_chart_data(port: str = "singapore") -> dict:
 
     x_all    = sorted(df["month"].astype(str).unique().tolist())
     freq     = PORTS.get(port, {}).get("data_frequency", "monthly")
-    x_all    = x_all[-(16 if freq == "quarterly" else 36):]   # recent window only
-    grades   = [g for g in GRADE_ORDER if g in df["fuel_type"].values]
-    others   = [g for g in df["fuel_type"].unique() if g not in GRADE_ORDER]
+    _n       = _window_periods(window, freq)
+    if _n:
+        x_all = x_all[-_n:]                                   # recent window only
+
+    # Significance test over the visible window: drop grades contributing
+    # <0.5% so the legend isn't cluttered with flat-zero series (e.g. Ammonia,
+    # Methanol, LNG in Singapore).
+    win_set   = set(x_all)
+    dfw       = df[df["month"].astype(str).isin(win_set)]
+    grade_tot = dfw.groupby("fuel_type")["volume_mt"].sum()
+    total_all = float(grade_tot.sum()) or 1.0
+    keep      = {g for g, v in grade_tot.items() if float(v) / total_all >= 0.005}
+
+    grades   = [g for g in GRADE_ORDER if g in keep]
+    others   = [g for g in df["fuel_type"].unique() if g not in GRADE_ORDER and g in keep]
 
     for grade in grades + others:
         sub = df[df["fuel_type"] == grade]

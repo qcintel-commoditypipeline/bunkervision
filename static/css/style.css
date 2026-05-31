@@ -455,6 +455,27 @@ input:focus-visible, select:focus-visible,
 }
 .hero-sub { font-size: var(--t-sm); color: var(--muted); margin-top: var(--s2); }
 
+/* Hero: text block + sparkline. Stacks on mobile, side-by-side on desktop. */
+.hero-card { display: flex; flex-direction: column; gap: var(--s3); }
+.hero-main { min-width: 0; }
+.hero-spark { width: 100%; height: 60px; min-height: 60px; }
+
+/* Chart header: title + window toggle */
+.chart-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s3); margin-bottom: var(--s3);
+}
+/* Segmented control (1Y / 3Y / All) */
+.seg { display: inline-flex; background: var(--surface-3); border-radius: var(--r-pill); padding: 3px; gap: 2px; flex-shrink: 0; }
+.seg-btn {
+  border: none; background: transparent; color: var(--muted);
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.03em;
+  padding: 4px 11px; border-radius: var(--r-pill); cursor: pointer;
+  transition: color .15s ease, background .15s ease;
+}
+.seg-btn:hover { color: var(--text); }
+.seg-btn.seg-active { background: var(--accent); color: #0d1117; }
+
 /* ── Verdict pill ─────────────────────────────────────────────────────────────── */
 .verdict-pill {
   display: inline-flex;
@@ -788,8 +809,13 @@ table.dataTable thead th { cursor: pointer; }
   .app-bottom-nav { display: none; }
 
   /* Desktop headline: hero spans both KPI rows on the left, KPIs 2x2 right. */
-  .headline-grid { grid-template-columns: 1.4fr 1fr 1fr; }
+  .headline-grid { grid-template-columns: 1.3fr 1fr 1fr; }
   .headline-grid > .hero-card { grid-column: 1; grid-row: 1 / span 2; }
+
+  /* Hero goes side-by-side: text left, sparkline filling the freed space. */
+  .hero-card { flex-direction: row; align-items: center; gap: var(--s5); }
+  .hero-main { flex: 0 0 auto; }
+  .hero-spark { flex: 1 1 auto; height: 130px; min-height: 130px; align-self: stretch; }
 }
 
 /* Prevent horizontal overflow from wide content/tables on small screens */

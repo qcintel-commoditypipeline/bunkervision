@@ -214,14 +214,24 @@ def api_demand():
     return jsonify(demand_model.running_demand_estimate(port=_get_port()))
 
 
+def _get_window():
+    w = request.args.get("window", "3y")
+    return w if w in ("1y", "3y", "5y", "all") else "3y"
+
+
 @app.route("/api/demand_chart")
 def api_demand_chart():
-    return jsonify(demand_model.demand_chart_data(port=_get_port()))
+    return jsonify(demand_model.demand_chart_data(port=_get_port(), window=_get_window()))
 
 
 @app.route("/api/fuel_split_chart")
 def api_fuel_split_chart():
-    return jsonify(demand_model.fuel_split_chart_data(port=_get_port()))
+    return jsonify(demand_model.fuel_split_chart_data(port=_get_port(), window=_get_window()))
+
+
+@app.route("/api/demand_spark")
+def api_demand_spark():
+    return jsonify(demand_model.demand_sparkline_data(port=_get_port()))
 
 
 @app.route("/api/snapshot_estimate", methods=["POST"])
