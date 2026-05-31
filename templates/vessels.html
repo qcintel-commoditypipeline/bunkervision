@@ -2,9 +2,9 @@
 {% block title %}Vessels — BunkerVision{% endblock %}
 
 {% block content %}
-<div class="page-header d-flex align-items-center justify-content-between mb-3">
+<div class="page-header d-flex flex-wrap align-items-center justify-content-between gap-2">
   <div>
-    <h5 class="mb-0 fw-semibold">Vessel Registry</h5>
+    <h5>Vessel Registry</h5>
     <div class="subtitle">{{ vessels|length }} registered bunker vessels across all ports</div>
   </div>
   <a href="/admin?port={{ current_port }}" class="btn btn-sm btn-outline-secondary">Manage in Admin →</a>
@@ -12,15 +12,14 @@
 
 <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
   <input id="reg-search" class="form-control form-control-sm"
-         placeholder="Search by name…"
-         style="width:200px;background:#0d1117;color:#e6edf3;border-color:#30363d;">
-  <div class="btn-group btn-group-sm" role="group">
-    <button class="btn btn-outline-secondary active port-filter-btn" data-port="">
+         placeholder="Search by name…" style="max-width:240px;">
+  <div class="d-flex flex-wrap gap-1" role="group">
+    <button class="btn btn-sm btn-outline-secondary active port-filter-btn" data-port="">
       All Ports <span class="badge bg-secondary ms-1">{{ vessels|length }}</span>
     </button>
     {% for key, cfg in ports.items() %}
     {% if port_counts.get(key, 0) > 0 %}
-    <button class="btn btn-outline-secondary port-filter-btn" data-port="{{ key }}">
+    <button class="btn btn-sm btn-outline-secondary port-filter-btn" data-port="{{ key }}">
       {{ cfg.name }} <span class="badge bg-secondary ms-1">{{ port_counts[key] }}</span>
     </button>
     {% endif %}
@@ -30,38 +29,40 @@
 
 <div class="card">
   <div class="card-body p-0">
-    <table class="table table-dark table-hover mb-0" style="width:100%">
-      <thead>
-        <tr>
-          <th>Vessel Name</th>
-          <th>Port</th>
-          <th>MMSI</th>
-          <th>Capacity (mt)</th>
-          <th>Events</th>
-          <th>Added</th>
-        </tr>
-      </thead>
-      <tbody id="registry-tbody">
-        {% for v in vessels %}
-        <tr data-port="{{ v.port }}" data-name="{{ (v.name or '')|lower }}">
-          <td class="fw-medium">{{ v.name or '—' }}</td>
-          <td>
-            <span class="badge" style="background:#1a2f4a;color:#7eb3ff;font-size:0.7rem;">
-              {{ ports[v.port].name if v.port in ports else v.port }}
-            </span>
-          </td>
-          <td class="text-muted" style="font-size:0.8rem;font-family:monospace;">{{ v.mmsi or '—' }}</td>
-          <td>{% if v.capacity_mt %}{{ '{:,.0f}'.format(v.capacity_mt) }}{% else %}—{% endif %}</td>
-          <td>
-            {% if v.event_count > 0 %}
-            <span style="color:#58a6ff;">{{ v.event_count }}</span>
-            {% else %}0{% endif %}
-          </td>
-          <td class="text-muted" style="font-size:0.78rem;">{{ v.last_updated or '—' }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-responsive">
+      <table class="table table-dark table-hover table-mobile-cards mb-0" style="width:100%">
+        <thead>
+          <tr>
+            <th>Vessel Name</th>
+            <th>Port</th>
+            <th>MMSI</th>
+            <th>Capacity (mt)</th>
+            <th>Events</th>
+            <th>Added</th>
+          </tr>
+        </thead>
+        <tbody id="registry-tbody">
+          {% for v in vessels %}
+          <tr data-port="{{ v.port }}" data-name="{{ (v.name or '')|lower }}">
+            <td class="fw-medium" data-label="Vessel Name">{{ v.name or '—' }}</td>
+            <td data-label="Port">
+              <span class="badge" style="background:#1a2f4a;color:#7eb3ff;font-size:0.7rem;">
+                {{ ports[v.port].name if v.port in ports else v.port }}
+              </span>
+            </td>
+            <td class="text-muted" data-label="MMSI" style="font-size:0.8rem;font-family:monospace;">{{ v.mmsi or '—' }}</td>
+            <td data-label="Capacity (mt)">{% if v.capacity_mt %}{{ '{:,.0f}'.format(v.capacity_mt) }}{% else %}—{% endif %}</td>
+            <td data-label="Events">
+              {% if v.event_count > 0 %}
+              <span style="color:#58a6ff;">{{ v.event_count }}</span>
+              {% else %}0{% endif %}
+            </td>
+            <td class="text-muted" data-label="Added" style="font-size:0.78rem;">{{ v.last_updated or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 <div id="reg-no-results" class="text-center text-muted py-4" style="display:none;">No vessels match</div>

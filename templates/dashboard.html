@@ -2,9 +2,9 @@
 {% block title %}{{ port_cfg.name }} — BunkerVision{% endblock %}
 
 {% block content %}
-<div class="page-header d-flex align-items-center justify-content-between mb-3">
+<div class="page-header d-flex align-items-start justify-content-between gap-3">
   <div>
-    <h5 class="mb-0 fw-semibold">{{ port_cfg.name }} Bunker Demand</h5>
+    <h5>{{ port_cfg.name }} Bunker Demand</h5>
     <div class="subtitle">
       {% if port_cfg.has_registry %}
         AIS-derived nowcast vs official sales · model track record
@@ -15,163 +15,133 @@
       {% endif %}
     </div>
   </div>
-  <div class="text-muted" style="font-size:0.75rem" id="last-updated"></div>
+  <div class="text-muted text-end" style="font-size:var(--t-xs);flex-shrink:0" id="last-updated"></div>
 </div>
 
 {% if port_cfg.has_registry %}
 {# ── HEADLINE: the number is the hero ───────────────────────────────────────── #}
-<div class="row g-3 mb-3">
+<div class="stat-grid mb-4" style="grid-template-columns:minmax(0,1.3fr) repeat(auto-fit,minmax(150px,1fr));">
   <!-- Hero nowcast -->
-  <div class="col-12 col-lg-5">
-    <div class="hero-card" id="hero-nowcast">
-      <div class="hero-label">Current-Month Nowcast</div>
-      <div class="hero-number"><span id="hero-proj">—</span></div>
-      <div class="hero-sub" id="hero-proj-sub">projecting full-month demand</div>
-      <div class="mt-3">
-        <span class="verdict-pill verdict-neu" id="hero-verdict">awaiting data</span>
-      </div>
+  <div class="hero-card" id="hero-nowcast" style="grid-row:span 2;">
+    <div class="hero-label">Current-Month Nowcast</div>
+    <div class="hero-number"><span id="hero-proj">—</span></div>
+    <div class="hero-sub" id="hero-proj-sub">projecting full-month demand</div>
+    <div class="mt-3">
+      <span class="verdict-pill verdict-neu" id="hero-verdict">awaiting data</span>
     </div>
   </div>
-  <!-- Supporting figures -->
-  <div class="col-12 col-lg-7">
-    <div class="row g-2 h-100">
-      <div class="col-6">
-        <div class="kpi-card h-100">
-          <div class="kpi-label">Gap vs Last Official</div>
-          <div class="kpi-val" id="kv-gap">—</div>
-          <div class="kpi-sub" id="kv-gap-sub">nowcast − last official</div>
-        </div>
-      </div>
-      <div class="col-6">
-        <div class="kpi-card h-100">
-          <div class="kpi-label">Last Official</div>
-          <div class="kpi-val" id="kv-official">—</div>
-          <div class="kpi-sub" id="kv-official-sub">most recent MPA figure</div>
-        </div>
-      </div>
-      <div class="col-6">
-        <div class="kpi-card h-100">
-          <div class="kpi-label">Detected MTD</div>
-          <div class="kpi-val" id="kv-mtd">—</div>
-          <div class="kpi-sub" id="kv-mtd-sub">events so far this month</div>
-        </div>
-      </div>
-      <div class="col-6">
-        <div class="kpi-card h-100">
-          <div class="kpi-label">Live / Active</div>
-          <div class="kpi-val" id="kv-live">—</div>
-          <div class="kpi-sub" id="kv-live-sub">AIS in port · active events</div>
-        </div>
-      </div>
-    </div>
+  <!-- Supporting KPIs -->
+  <div class="kpi-card">
+    <div class="kpi-label">Gap vs Last Official</div>
+    <div class="kpi-val" id="kv-gap">—</div>
+    <div class="kpi-sub" id="kv-gap-sub">nowcast − last official</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Last Official</div>
+    <div class="kpi-val" id="kv-official">—</div>
+    <div class="kpi-sub" id="kv-official-sub">most recent MPA figure</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Detected MTD</div>
+    <div class="kpi-val" id="kv-mtd">—</div>
+    <div class="kpi-sub" id="kv-mtd-sub">events so far this month</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Live / Active</div>
+    <div class="kpi-val" id="kv-live">—</div>
+    <div class="kpi-sub" id="kv-live-sub">AIS in port · active events</div>
   </div>
 </div>
 {% else %}
-{# ── Non-registry port: lightweight KPI row ─────────────────────────────────── #}
-<div class="row g-2 mb-3">
-  <div class="col-6 col-md-3">
-    <div class="kpi-card">
-      <div class="kpi-label">Live AIS Vessels</div>
-      <div class="kpi-val" id="kv-live">—</div>
-      <div class="kpi-sub">in port area now</div>
-    </div>
+{# ── Non-registry port: lightweight KPI grid ────────────────────────────────── #}
+<div class="stat-grid mb-4">
+  <div class="kpi-card">
+    <div class="kpi-label">Live AIS Vessels</div>
+    <div class="kpi-val" id="kv-live">—</div>
+    <div class="kpi-sub">in port area now</div>
   </div>
-  <div class="col-6 col-md-3">
-    <div class="kpi-card">
-      <div class="kpi-label">Last Official Data</div>
-      <div class="kpi-val" id="kv-last-vol">—</div>
-      <div class="kpi-sub" id="kv-last-month">—</div>
-    </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Last Official Data</div>
+    <div class="kpi-val" id="kv-last-vol">—</div>
+    <div class="kpi-sub" id="kv-last-month">—</div>
   </div>
-  <div class="col-6 col-md-3">
-    <div class="kpi-card">
-      <div class="kpi-label">Seasonal Avg</div>
-      <div class="kpi-val" id="kv-seasonal">—</div>
-      <div class="kpi-sub">this {{ port_cfg.data_frequency or 'period' }}</div>
-    </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Seasonal Avg</div>
+    <div class="kpi-val" id="kv-seasonal">—</div>
+    <div class="kpi-sub">this {{ port_cfg.data_frequency or 'period' }}</div>
   </div>
-  <div class="col-6 col-md-3">
-    <div class="kpi-card">
-      <div class="kpi-label">Detection</div>
-      <div class="kpi-val" style="font-size:1rem;color:#8b949e;">No Registry</div>
-      <div class="kpi-sub">AIS tracking only</div>
-    </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Detection</div>
+    <div class="kpi-val" style="font-size:1rem;color:var(--muted);">No Registry</div>
+    <div class="kpi-sub">AIS tracking only</div>
   </div>
 </div>
 {% endif %}
 
-{# ── Charts ──────────────────────────────────────────────────────────────────── #}
-<div class="row g-2 mb-3">
-  <div class="col-12 col-xl-7">
-    <div class="card h-100">
-      <div class="card-body pb-2">
-        <div class="section-label">
-          {% if port_cfg.has_registry %}
-            {{ port_cfg.name | upper }} BUNKER SALES — AIS PROJECTED VS OFFICIAL
-          {% else %}
-            {{ port_cfg.name | upper }} BUNKER SALES{% if port_cfg.data_frequency == 'quarterly' %} (QUARTERLY){% endif %}
-            {% if not port_cfg.data_source %}<span class="text-muted" style="font-size:0.75rem"> — AIS only, no official data</span>{% endif %}
-          {% endif %}
-        </div>
-        <div id="demand-chart" style="min-height:300px;"></div>
+{# ── Charts — full-width single column on mobile, side-by-side on desktop ─────── #}
+<div class="stat-grid mb-4" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));">
+  <div class="card" style="grid-column:span 1;min-width:0;">
+    <div class="card-body">
+      <div class="section-label">
+        {% if port_cfg.has_registry %}
+          {{ port_cfg.name | upper }} BUNKER SALES — AIS PROJECTED VS OFFICIAL
+        {% else %}
+          {{ port_cfg.name | upper }} BUNKER SALES{% if port_cfg.data_frequency == 'quarterly' %} (QUARTERLY){% endif %}
+          {% if not port_cfg.data_source %}<span class="text-muted" style="font-size:var(--t-xs)"> — AIS only, no official data</span>{% endif %}
+        {% endif %}
       </div>
+      <div id="demand-chart" style="min-height:300px;width:100%;"></div>
     </div>
   </div>
-  <div class="col-12 col-xl-5">
-    <div class="card h-100">
-      <div class="card-body pb-2">
-        <div class="section-label">FUEL SPLIT</div>
-        <div id="fuel-split-chart" style="min-height:300px;"></div>
-      </div>
+  <div class="card" style="min-width:0;">
+    <div class="card-body">
+      <div class="section-label">FUEL SPLIT</div>
+      <div id="fuel-split-chart" style="min-height:300px;width:100%;"></div>
     </div>
   </div>
 </div>
 
 {% if port_cfg.has_registry %}
 {# ── Track record / accuracy panel ───────────────────────────────────────────── #}
-<div class="row g-2 mb-3">
-  <div class="col-12">
-    <div class="card">
-      <div class="card-body">
-        <div class="d-flex align-items-center justify-content-between mb-2">
-          <span class="section-label mb-0">MODEL TRACK RECORD</span>
-          <span class="text-muted" style="font-size:0.72rem;" id="acc-note"></span>
-        </div>
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <span class="section-label mb-0">MODEL TRACK RECORD</span>
+      <span class="text-muted" style="font-size:var(--t-xs);" id="acc-note"></span>
+    </div>
 
-        <!-- Summary stats -->
-        <div class="row g-2 mb-3" id="acc-summary">
-          <div class="col-6 col-md-3 col-xl"><div class="acc-stat-val" id="acc-graded">—</div><div class="acc-stat-label">Months Graded</div></div>
-          <div class="col-6 col-md-3 col-xl"><div class="acc-stat-val" id="acc-mape">—</div><div class="acc-stat-label">Mean Abs % Error</div></div>
-          <div class="col-6 col-md-3 col-xl"><div class="acc-stat-val" id="acc-w10">—</div><div class="acc-stat-label">Within 10%</div></div>
-          <div class="col-6 col-md-3 col-xl"><div class="acc-stat-val" id="acc-w5">—</div><div class="acc-stat-label">Within 5%</div></div>
-          <div class="col-6 col-md-3 col-xl"><div class="acc-stat-val" id="acc-bias">—</div><div class="acc-stat-label">Bias</div></div>
-        </div>
+    <!-- Summary stats -->
+    <div class="stat-grid mb-4" id="acc-summary" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));">
+      <div><div class="acc-stat-val" id="acc-graded">—</div><div class="acc-stat-label">Months Graded</div></div>
+      <div><div class="acc-stat-val" id="acc-mape">—</div><div class="acc-stat-label">Mean Abs % Error</div></div>
+      <div><div class="acc-stat-val" id="acc-w10">—</div><div class="acc-stat-label">Within 10%</div></div>
+      <div><div class="acc-stat-val" id="acc-w5">—</div><div class="acc-stat-label">Within 5%</div></div>
+      <div><div class="acc-stat-val" id="acc-bias">—</div><div class="acc-stat-label">Bias</div></div>
+    </div>
 
-        <!-- Per-month table -->
-        <div class="table-responsive">
-          <table class="table table-dark table-hover mb-0 acc-table" style="width:100%">
-            <thead>
-              <tr>
-                <th>Month</th>
-                <th class="text-end">Estimated</th>
-                <th class="text-end">Official</th>
-                <th class="text-end">% Error</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody id="acc-tbody">
-              <tr><td colspan="5" class="text-center text-muted py-3">Loading track record…</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+    <!-- Per-month table → reflows to cards under 600px -->
+    <div class="table-responsive">
+      <table class="table table-dark table-hover mb-0 acc-table table-mobile-cards" style="width:100%">
+        <thead>
+          <tr>
+            <th>Month</th>
+            <th class="text-end">Estimated</th>
+            <th class="text-end">Official</th>
+            <th class="text-end">% Error</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="acc-tbody">
+          <tr><td colspan="5" class="text-center text-muted py-3">Loading track record…</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </div>
 {% endif %}
 
 {# ── Live map + feed (secondary — behind a tab) ──────────────────────────────── #}
-<ul class="nav nav-pills mb-2" id="ops-tabs" role="tablist">
+<ul class="nav nav-pills mb-3" id="ops-tabs" role="tablist">
   <li class="nav-item" role="presentation">
     <button class="nav-link active" id="tab-map-btn" data-bs-toggle="pill"
             data-bs-target="#tab-map" type="button" role="tab">Live Map</button>
@@ -185,20 +155,20 @@
 </ul>
 <div class="tab-content">
   <div class="tab-pane fade show active" id="tab-map" role="tabpanel">
-    <div class="card" style="height:420px">
-      <div id="map" style="height:100%;border-radius:8px;"></div>
+    <div class="card" style="height:clamp(360px,60vh,420px);overflow:hidden;">
+      <div id="map" style="height:100%;width:100%;border-radius:var(--r-md);touch-action:pan-x pan-y;"></div>
     </div>
   </div>
   <div class="tab-pane fade" id="tab-feed" role="tabpanel">
-    <div class="card" style="height:420px;overflow:hidden;display:flex;flex-direction:column;">
-      <div class="px-3 pt-3 pb-2 d-flex align-items-center justify-content-between border-bottom border-secondary border-opacity-25">
+    <div class="card" style="height:clamp(360px,60vh,420px);overflow:hidden;display:flex;flex-direction:column;">
+      <div class="px-3 pt-3 pb-2 d-flex align-items-center justify-content-between" style="border-bottom:1px solid var(--border-soft);">
         <span class="section-label mb-0">
           {% if port_cfg.has_registry %}Live Event Feed{% else %}Live Vessel Feed{% endif %}
         </span>
         <span id="event-count-badge" class="badge rounded-pill"
-              style="background:rgba(88,166,255,0.15);color:#58a6ff;font-size:0.7rem">0 active</span>
+              style="background:var(--accent-dim);color:var(--accent);font-size:var(--t-xs)">0 active</span>
       </div>
-      <div id="event-feed" style="overflow-y:auto;flex:1;padding:0.5rem 0.75rem;font-size:0.8rem;"></div>
+      <div id="event-feed" style="overflow-y:auto;flex:1;padding:var(--s2) var(--s3);font-size:var(--t-sm);"></div>
     </div>
   </div>
 </div>
@@ -353,11 +323,11 @@ async function refreshAccuracy() {
     }
     const label = r.label || `${r.year || ''}-${String(r.month || '').padStart(2, '0')}`;
     return `<tr class="${partial ? 'acc-row-partial' : ''}">
-      <td class="fw-medium">${label}</td>
-      <td class="text-end">${est}</td>
-      <td class="text-end">${off}</td>
-      <td class="text-end">${errCell}</td>
-      <td>${accStatusPill(r.status)}</td>
+      <td class="fw-medium" data-label="Month">${label}</td>
+      <td class="text-end" data-label="Estimated">${est}</td>
+      <td class="text-end" data-label="Official">${off}</td>
+      <td class="text-end" data-label="% Error">${errCell}</td>
+      <td data-label="Status">${accStatusPill(r.status)}</td>
     </tr>`;
   }).join('');
 }

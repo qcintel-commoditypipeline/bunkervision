@@ -19,9 +19,9 @@
 {% endmacro %}
 
 {# ── Page header ───────────────────────────────────────────────────────────── #}
-<div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-2">
+<div class="page-header d-flex flex-wrap align-items-center justify-content-between gap-2">
   <div>
-    <h5 class="mb-0 fw-semibold">Global Bunker Prices</h5>
+    <h5>Global Bunker Prices</h5>
     <div class="subtitle">Ship &amp; Bunker · Integr8 · Quantum — {{ all_ports|length }} ports — USD/MT</div>
   </div>
   <select id="region-filter" class="form-select form-select-sm" style="width:auto;"
@@ -96,6 +96,7 @@
   <div class="col-12 col-xl-7" id="ports-col">
     <div class="card">
       <div class="card-body p-0">
+        <div class="table-responsive">
         <table class="table table-dark table-hover mb-0" id="ports-table"
                style="font-size:0.8rem;">
           <thead>
@@ -149,6 +150,7 @@
             {% endfor %}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   </div>
@@ -239,6 +241,7 @@
   <div class="section-label mb-2">Quantum assessments — Singapore &amp; Rotterdam</div>
   <div class="card">
     <div class="card-body p-0">
+      <div class="table-responsive">
       <table class="table table-dark table-hover mb-0" style="font-size:0.8rem;">
         <thead>
           <tr>
@@ -277,6 +280,7 @@
           {% endfor %}
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 </div>

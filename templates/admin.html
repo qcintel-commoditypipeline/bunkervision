@@ -2,15 +2,15 @@
 {% block title %}Admin — BunkerVision{% endblock %}
 
 {% block content %}
-<div class="d-flex align-items-center justify-content-between mb-3">
+<div class="page-header d-flex flex-wrap align-items-center justify-content-between gap-2">
   <div>
-    <h5 class="mb-0 fw-semibold">Registry Admin</h5>
+    <h5>Registry Admin</h5>
     <div class="subtitle">Operator tooling — manage the bunker-vessel registry, AIS discovery &amp; Equasis scans · {{ vessels|length }} registered vessels</div>
   </div>
   <button id="refresh-btn" class="btn btn-sm btn-outline-secondary">Refresh SG Registry</button>
 </div>
 
-<ul class="nav nav-pills mb-3" id="vessel-tabs" role="tablist">
+<ul class="nav nav-pills mb-3 flex-wrap" id="vessel-tabs" role="tablist">
   <li class="nav-item" role="presentation">
     <button class="nav-link active" id="tab-registry-btn" data-bs-toggle="pill"
             data-bs-target="#tab-registry" type="button" role="tab">Registry</button>
@@ -31,15 +31,14 @@
   <div class="tab-pane fade show active" id="tab-registry" role="tabpanel">
     <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
       <input id="reg-search" class="form-control form-control-sm"
-             placeholder="Search by name…"
-             style="width:200px;background:#0d1117;color:#e6edf3;border-color:#30363d;">
-      <div class="btn-group btn-group-sm" role="group">
-        <button class="btn btn-outline-secondary active port-filter-btn" data-port="">
+             placeholder="Search by name…" style="max-width:240px;">
+      <div class="d-flex flex-wrap gap-1" role="group">
+        <button class="btn btn-sm btn-outline-secondary active port-filter-btn" data-port="">
           All Ports <span class="badge bg-secondary ms-1">{{ vessels|length }}</span>
         </button>
         {% for key, cfg in ports.items() %}
         {% if port_counts.get(key, 0) > 0 %}
-        <button class="btn btn-outline-secondary port-filter-btn" data-port="{{ key }}">
+        <button class="btn btn-sm btn-outline-secondary port-filter-btn" data-port="{{ key }}">
           {{ cfg.name }} <span class="badge bg-secondary ms-1">{{ port_counts[key] }}</span>
         </button>
         {% endif %}
@@ -49,44 +48,46 @@
 
     <div class="card">
       <div class="card-body p-0">
-        <table class="table table-dark table-hover mb-0" style="width:100%">
-          <thead>
-            <tr>
-              <th>Vessel Name</th>
-              <th>Port</th>
-              <th>MMSI</th>
-              <th>Capacity (mt)</th>
-              <th>Events</th>
-              <th>Added</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="registry-tbody">
-            {% for v in vessels %}
-            <tr data-port="{{ v.port }}" data-name="{{ (v.name or '')|lower }}">
-              <td class="fw-medium">{{ v.name or '—' }}</td>
-              <td>
-                <span class="badge" style="background:#1a2f4a;color:#7eb3ff;font-size:0.7rem;">
-                  {{ ports[v.port].name if v.port in ports else v.port }}
-                </span>
-              </td>
-              <td class="text-muted" style="font-size:0.8rem;font-family:monospace;">{{ v.mmsi or '—' }}</td>
-              <td>{% if v.capacity_mt %}{{ '{:,.0f}'.format(v.capacity_mt) }}{% else %}—{% endif %}</td>
-              <td>
-                {% if v.event_count > 0 %}
-                <span style="color:#58a6ff;">{{ v.event_count }}</span>
-                {% else %}0{% endif %}
-              </td>
-              <td class="text-muted" style="font-size:0.78rem;">{{ v.last_updated or '—' }}</td>
-              <td class="text-end">
-                <button class="btn btn-sm remove-btn py-0 px-2"
-                        data-imo="{{ v.imo }}" data-name="{{ v.name or v.imo }}"
-                        style="font-size:0.7rem;color:#f85149;border:1px solid #3d1a1a;background:transparent;">✕</button>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+        <div class="table-responsive">
+          <table class="table table-dark table-hover table-mobile-cards mb-0" style="width:100%">
+            <thead>
+              <tr>
+                <th>Vessel Name</th>
+                <th>Port</th>
+                <th>MMSI</th>
+                <th>Capacity (mt)</th>
+                <th>Events</th>
+                <th>Added</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="registry-tbody">
+              {% for v in vessels %}
+              <tr data-port="{{ v.port }}" data-name="{{ (v.name or '')|lower }}">
+                <td class="fw-medium" data-label="Vessel Name">{{ v.name or '—' }}</td>
+                <td data-label="Port">
+                  <span class="badge" style="background:#1a2f4a;color:#7eb3ff;font-size:0.7rem;">
+                    {{ ports[v.port].name if v.port in ports else v.port }}
+                  </span>
+                </td>
+                <td class="text-muted" data-label="MMSI" style="font-size:0.8rem;font-family:monospace;">{{ v.mmsi or '—' }}</td>
+                <td data-label="Capacity (mt)">{% if v.capacity_mt %}{{ '{:,.0f}'.format(v.capacity_mt) }}{% else %}—{% endif %}</td>
+                <td data-label="Events">
+                  {% if v.event_count > 0 %}
+                  <span style="color:#58a6ff;">{{ v.event_count }}</span>
+                  {% else %}0{% endif %}
+                </td>
+                <td class="text-muted" data-label="Added" style="font-size:0.78rem;">{{ v.last_updated or '—' }}</td>
+                <td class="text-end" data-label="">
+                  <button class="btn btn-sm remove-btn py-0 px-2"
+                          data-imo="{{ v.imo }}" data-name="{{ v.name or v.imo }}"
+                          style="font-size:0.7rem;color:#f85149;border:1px solid #3d1a1a;background:transparent;">✕</button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
     <div id="reg-no-results" class="text-center text-muted py-4" style="display:none;">No vessels match</div>
@@ -101,25 +102,23 @@
 
     {# ── Primary: AIS tanker scan ────────────────────────────────────────── #}
     <div class="d-flex align-items-end gap-3 mb-3 flex-wrap">
-      <div>
-        <label class="text-muted mb-1" style="font-size:0.8rem;display:block;">Port</label>
-        <select id="eq-scan-port" class="form-select form-select-sm"
-                style="width:180px;background:#0d1117;color:#e6edf3;border-color:#30363d;">
+      <div class="flex-grow-1" style="min-width:160px;max-width:220px;">
+        <label class="section-label mb-1">Port</label>
+        <select id="eq-scan-port" class="form-select form-select-sm">
           {% for key, cfg in ports.items() %}
           <option value="{{ key }}" {% if key == current_port %}selected{% endif %}>{{ cfg.name }}</option>
           {% endfor %}
         </select>
       </div>
-      <div>
-        <label class="text-muted mb-1" style="font-size:0.8rem;display:block;">Lookback</label>
-        <select id="eq-scan-days" class="form-select form-select-sm"
-                style="width:120px;background:#0d1117;color:#e6edf3;border-color:#30363d;">
+      <div style="min-width:120px;">
+        <label class="section-label mb-1">Lookback</label>
+        <select id="eq-scan-days" class="form-select form-select-sm">
           <option value="7" selected>7 days</option>
           <option value="14">14 days</option>
           <option value="30">30 days</option>
         </select>
       </div>
-      <button id="eq-scan-btn" class="btn btn-sm btn-primary" style="padding:0.3rem 1rem;">
+      <button id="eq-scan-btn" class="btn btn-sm btn-primary">
         Scan AIS Tankers
       </button>
       <span id="eq-scan-status" class="text-muted" style="font-size:0.85rem;"></span>
@@ -127,27 +126,29 @@
 
     <div class="card mb-4">
       <div class="card-body p-0">
-        <table class="table table-dark table-hover mb-0" style="width:100%">
-          <thead>
-            <tr>
-              <th>Vessel Name</th>
-              <th>IMO</th>
-              <th>MMSI</th>
-              <th>Equasis Type</th>
-              <th>Flag</th>
-              <th>GT</th>
-              <th>SOG</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="eq-scan-body">
-            <tr>
-              <td colspan="8" class="text-center text-muted py-4">
-                Select a port and click <strong>Scan AIS Tankers</strong>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-responsive">
+          <table class="table table-dark table-hover mb-0" style="width:100%">
+            <thead>
+              <tr>
+                <th>Vessel Name</th>
+                <th>IMO</th>
+                <th>MMSI</th>
+                <th>Equasis Type</th>
+                <th>Flag</th>
+                <th>GT</th>
+                <th>SOG</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="eq-scan-body">
+              <tr>
+                <td colspan="8" class="text-center text-muted py-4">
+                  Select a port and click <strong>Scan AIS Tankers</strong>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -160,10 +161,9 @@
     </div>
     <div class="collapse" id="eq-operators-panel">
       <div class="d-flex gap-2 mb-3 flex-wrap align-items-end">
-        <div class="flex-grow-1" style="max-width:300px;">
+        <div class="flex-grow-1" style="min-width:200px;max-width:300px;">
           <div class="input-group input-group-sm">
-            <input id="op-new-name" class="form-control" placeholder="Add operator…"
-                   style="background:#0d1117;color:#e6edf3;border-color:#30363d;">
+            <input id="op-new-name" class="form-control" placeholder="Add operator…">
             <button class="btn btn-outline-secondary" id="op-add-btn">Add</button>
           </div>
         </div>
@@ -176,15 +176,17 @@
       <div id="op-results-wrap" style="display:none;">
         <div class="card">
           <div class="card-body p-0">
-            <table class="table table-dark table-hover mb-0" style="width:100%">
-              <thead>
-                <tr>
-                  <th>Operator</th><th>Vessel</th><th>IMO</th>
-                  <th>Equasis Type</th><th>Ports assigned</th><th>Status</th>
-                </tr>
-              </thead>
-              <tbody id="op-results-body"></tbody>
-            </table>
+            <div class="table-responsive">
+              <table class="table table-dark table-hover mb-0" style="width:100%">
+                <thead>
+                  <tr>
+                    <th>Operator</th><th>Vessel</th><th>IMO</th>
+                    <th>Equasis Type</th><th>Ports assigned</th><th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="op-results-body"></tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
@@ -199,16 +201,14 @@
     </div>
     <div class="collapse" id="eq-name-search-panel">
       <div class="d-flex align-items-end gap-3 mb-3 flex-wrap">
-        <div>
-          <label class="text-muted mb-1" style="font-size:0.8rem;display:block;">Search term</label>
+        <div class="flex-grow-1" style="min-width:200px;max-width:260px;">
+          <label class="section-label mb-1">Search term</label>
           <input id="eq-search-term" class="form-control form-control-sm"
-                 placeholder="e.g. veder, koole, apex…"
-                 style="width:240px;background:#0d1117;color:#e6edf3;border-color:#30363d;">
+                 placeholder="e.g. veder, koole, apex…">
         </div>
-        <div>
-          <label class="text-muted mb-1" style="font-size:0.8rem;display:block;">Add to port</label>
-          <select id="eq-add-port" class="form-select form-select-sm"
-                  style="width:180px;background:#0d1117;color:#e6edf3;border-color:#30363d;">
+        <div style="min-width:160px;">
+          <label class="section-label mb-1">Add to port</label>
+          <select id="eq-add-port" class="form-select form-select-sm">
             {% for key, cfg in ports.items() %}
             <option value="{{ key }}" {% if key == current_port %}selected{% endif %}>{{ cfg.name }}</option>
             {% endfor %}
@@ -223,17 +223,19 @@
       </div>
       <div class="card">
         <div class="card-body p-0">
-          <table class="table table-dark table-hover mb-0" style="width:100%">
-            <thead>
-              <tr>
-                <th>Vessel Name</th><th>IMO</th><th>Equasis Type</th>
-                <th>Flag</th><th>GT</th><th>Year</th><th>In AIS</th><th></th>
-              </tr>
-            </thead>
-            <tbody id="eq-results-body">
-              <tr><td colspan="8" class="text-center text-muted py-4">Enter a term above</td></tr>
-            </tbody>
-          </table>
+          <div class="table-responsive">
+            <table class="table table-dark table-hover mb-0" style="width:100%">
+              <thead>
+                <tr>
+                  <th>Vessel Name</th><th>IMO</th><th>Equasis Type</th>
+                  <th>Flag</th><th>GT</th><th>Year</th><th>In AIS</th><th></th>
+                </tr>
+              </thead>
+              <tbody id="eq-results-body">
+                <tr><td colspan="8" class="text-center text-muted py-4">Enter a term above</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -242,10 +244,9 @@
   {# ── DISCOVER TAB ──────────────────────────────────────────────────────── #}
   <div class="tab-pane fade" id="tab-discover" role="tabpanel">
     <div class="d-flex align-items-end gap-3 mb-3 flex-wrap">
-      <div>
-        <label class="text-muted mb-1" style="font-size:0.8rem;display:block;">Port</label>
-        <select id="discover-port" class="form-select form-select-sm"
-                style="width:200px;background:#0d1117;color:#e6edf3;border-color:#30363d;">
+      <div class="flex-grow-1" style="min-width:180px;max-width:240px;">
+        <label class="section-label mb-1">Port</label>
+        <select id="discover-port" class="form-select form-select-sm">
           {% for key, cfg in ports.items() %}
           <option value="{{ key }}" {% if key == current_port %}selected{% endif %}>{{ cfg.name }}</option>
           {% endfor %}
@@ -264,27 +265,29 @@
 
     <div class="card">
       <div class="card-body p-0">
-        <table class="table table-dark table-hover mb-0" style="width:100%">
-          <thead>
-            <tr>
-              <th>Vessel Name</th>
-              <th>MMSI</th>
-              <th>IMO</th>
-              <th>AIS Class</th>
-              <th>VesselFinder Type</th>
-              <th>Draught (m)</th>
-              <th>SOG (kt)</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="candidates-body">
-            <tr>
-              <td colspan="8" class="text-center text-muted py-4">
-                Select a port and click <strong>Find Candidates</strong>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-responsive">
+          <table class="table table-dark table-hover mb-0" style="width:100%">
+            <thead>
+              <tr>
+                <th>Vessel Name</th>
+                <th>MMSI</th>
+                <th>IMO</th>
+                <th>AIS Class</th>
+                <th>VesselFinder Type</th>
+                <th>Draught (m)</th>
+                <th>SOG (kt)</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="candidates-body">
+              <tr>
+                <td colspan="8" class="text-center text-muted py-4">
+                  Select a port and click <strong>Find Candidates</strong>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>

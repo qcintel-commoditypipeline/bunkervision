@@ -2,8 +2,11 @@
 <html lang="en" data-bs-theme="dark">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{% block title %}BunkerVision{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdn.datatables.net/2.0.5/css/dataTables.bootstrap5.min.css">
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.css">
@@ -11,74 +14,100 @@
 </head>
 <body>
 
-<nav class="navbar navbar-expand-lg sticky-top">
-  <div class="container-fluid px-3">
-    <a class="navbar-brand" href="/">&#9875; BunkerVision</a>
-    <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navmenu">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-    <div class="collapse navbar-collapse" id="navmenu">
-      <ul class="navbar-nav me-auto gap-1">
-        <li class="nav-item">
-          <a class="nav-link {% if request.path == '/' %}active{% endif %}"
-             href="/?port={{ current_port | default('singapore') }}">Headline</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if request.path == '/admin' %}active{% endif %}"
-             href="/admin?port={{ current_port | default('singapore') }}">Admin</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if request.path == '/events' %}active{% endif %}" href="/events">Events</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if request.path == '/vessels' %}active{% endif %}" href="/vessels">Vessels</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link {% if request.path == '/prices' %}active{% endif %}" href="/prices">Prices</a>
-        </li>
+{# ── Top app-bar (desktop full nav, mobile compact bar) ───────────────────────── #}
+<header class="app-bar">
+  <div class="app-bar-inner">
+    <a class="brand" href="/?port={{ current_port | default('singapore') }}">
+      <span class="brand-mark">&#9875;</span>
+      <span class="brand-name">BunkerVision</span>
+    </a>
 
-        <!-- Port selector -->
-        <li class="nav-item dropdown ms-2">
-          <a class="nav-link dropdown-toggle px-2 py-1 rounded"
-             style="background:rgba(88,166,255,0.1);border:1px solid rgba(88,166,255,0.25);font-size:0.82rem;"
-             href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-            &#128205; {{ ports[current_port | default('singapore')].name if ports else 'Singapore' }}
-          </a>
-          <ul class="dropdown-menu dropdown-menu-dark shadow" style="min-width:170px;font-size:0.82rem;">
-            {% if ports %}
-              <li><h6 class="dropdown-header" style="font-size:0.7rem;letter-spacing:.05em;">DATA + AIS</h6></li>
-              {% for key, p in ports.items() if p.data_source %}
-              <li>
-                <a class="dropdown-item {% if key == current_port %}active{% endif %}"
-                   href="/?port={{ key }}">{{ p.name }}
-                  {% if p.data_frequency == 'quarterly' %}<span class="text-muted ms-1" style="font-size:0.7rem;">Qtrly</span>{% endif %}
-                </a>
-              </li>
-              {% endfor %}
-              <li><hr class="dropdown-divider my-1"></li>
-              <li><h6 class="dropdown-header" style="font-size:0.7rem;letter-spacing:.05em;">AIS ONLY</h6></li>
-              {% for key, p in ports.items() if not p.data_source %}
-              <li>
-                <a class="dropdown-item {% if key == current_port %}active{% endif %}"
-                   href="/?port={{ key }}">{{ p.name }}</a>
-              </li>
-              {% endfor %}
-            {% endif %}
-          </ul>
-        </li>
-      </ul>
+    {# Desktop horizontal nav — hidden on mobile #}
+    <nav class="app-nav" aria-label="Primary">
+      <a class="app-nav-link {% if request.path == '/' %}active{% endif %}"
+         href="/?port={{ current_port | default('singapore') }}">Headline</a>
+      <a class="app-nav-link {% if request.path == '/admin' %}active{% endif %}"
+         href="/admin?port={{ current_port | default('singapore') }}">Admin</a>
+      <a class="app-nav-link {% if request.path == '/events' %}active{% endif %}" href="/events">Events</a>
+      <a class="app-nav-link {% if request.path == '/vessels' %}active{% endif %}" href="/vessels">Vessels</a>
+      <a class="app-nav-link {% if request.path == '/prices' %}active{% endif %}" href="/prices">Prices</a>
+    </nav>
 
-      <div class="d-flex align-items-center gap-3">
-        <span id="live-badge" class="badge bg-secondary" style="font-size:0.7rem">AIS connecting…</span>
-        <span id="nav-stats" class="text-muted d-none d-lg-inline" style="font-size:0.75rem"></span>
+    <div class="app-bar-right">
+      {# Port selector — custom dropdown driven by ui.js #}
+      <div class="port-select" data-port-select>
+        <button class="port-select-btn" type="button" data-port-toggle aria-haspopup="true" aria-expanded="false">
+          <span class="port-pin">&#128205;</span>
+          <span class="port-current">{{ ports[current_port | default('singapore')].name if ports else 'Singapore' }}</span>
+          <span class="port-caret" aria-hidden="true">&#9662;</span>
+        </button>
+        <div class="port-menu" data-port-menu role="menu">
+          {% if ports %}
+            <div class="port-menu-header">Data + AIS</div>
+            {% for key, p in ports.items() if p.data_source %}
+            <a class="port-menu-item {% if key == current_port %}active{% endif %}" role="menuitem"
+               href="/?port={{ key }}">
+              <span>{{ p.name }}</span>
+              {% if p.data_frequency == 'quarterly' %}<span class="port-menu-tag">Qtrly</span>{% endif %}
+            </a>
+            {% endfor %}
+            <div class="port-menu-divider"></div>
+            <div class="port-menu-header">AIS only</div>
+            {% for key, p in ports.items() if not p.data_source %}
+            <a class="port-menu-item {% if key == current_port %}active{% endif %}" role="menuitem"
+               href="/?port={{ key }}">{{ p.name }}</a>
+            {% endfor %}
+          {% endif %}
+        </div>
       </div>
+
+      <span id="live-badge" class="badge bg-secondary">AIS connecting…</span>
+      <span id="nav-stats" class="nav-stats"></span>
     </div>
   </div>
-</nav>
+</header>
 
-<div class="container-fluid px-3 py-3">
-  {% block content %}{% endblock %}
-</div>
+<main class="app-content">
+  <div class="container-fluid">
+    {% block content %}{% endblock %}
+  </div>
+</main>
+
+{# ── Mobile bottom tab bar — hidden on desktop ────────────────────────────────── #}
+<nav class="app-bottom-nav" aria-label="Primary mobile">
+  <a class="bottom-tab {% if request.path == '/' %}active{% endif %}"
+     href="/?port={{ current_port | default('singapore') }}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/>
+    </svg>
+    <span>Headline</span>
+  </a>
+  <a class="bottom-tab {% if request.path == '/admin' %}active{% endif %}"
+     href="/admin?port={{ current_port | default('singapore') }}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M12 3l8 4v5c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V7z"/>
+    </svg>
+    <span>Admin</span>
+  </a>
+  <a class="bottom-tab {% if request.path == '/events' %}active{% endif %}" href="/events">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M13 2 4 14h7l-1 8 9-12h-7z"/>
+    </svg>
+    <span>Events</span>
+  </a>
+  <a class="bottom-tab {% if request.path == '/vessels' %}active{% endif %}" href="/vessels">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M3 14h18l-2.5 5H5.5z"/><path d="M6 14V6l6-3 6 3v8"/><path d="M12 3v11"/>
+    </svg>
+    <span>Vessels</span>
+  </a>
+  <a class="bottom-tab {% if request.path == '/prices' %}active{% endif %}" href="/prices">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M3 17l5-5 4 4 8-8"/><path d="M16 8h4v4"/>
+    </svg>
+    <span>Prices</span>
+  </a>
+</nav>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.plot.ly/plotly-2.29.1.min.js"></script>
@@ -86,6 +115,7 @@
 <script src="https://cdn.datatables.net/2.0.5/js/dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/2.0.5/js/dataTables.bootstrap5.min.js"></script>
 <script src="https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.js"></script>
+<script src="{{ url_for('static', filename='js/ui.js') }}"></script>
 
 <script>
 const PLY_CFG = {
@@ -118,7 +148,7 @@ fetch(`/api/stats?port=${CURRENT_PORT}`).then(r => r.json()).then(s => {
   const el = document.getElementById('nav-stats');
   if (el) {
     el.textContent = `${s.vessel_count} bunker vessels · ${s.live_positions} live · ${s.active_events} active events`;
-    el.classList.remove('d-none');
+    el.classList.add('is-visible');
   }
 }).catch(() => {});
 </script>

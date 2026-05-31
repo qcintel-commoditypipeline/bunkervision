@@ -58,7 +58,16 @@ function initMap() {
     center: [MAP_CENTRE.lon, MAP_CENTRE.lat],
     zoom:   MAP_CENTRE.zoom,
     attributionControl: false,
+    dragRotate: false,          // flat north-up map — avoids accidental rotation on touch
+    pitchWithRotate: false,
+    touchPitch: false,          // two-finger drag pans/zooms instead of tilting on mobile
+    cooperativeGestures: false,
   });
+  // Single-finger touch pans the map without rotating it.
+  if (map.touchZoomRotate) map.touchZoomRotate.disableRotation();
+
+  // Settle layout once the canvas has a real size (e.g. shown inside a tab).
+  map.on('load', () => map.resize());
 
   map.addControl(new maplibregl.NavigationControl(), 'top-right');
   map.addControl(new maplibregl.AttributionControl({ compact: true }));

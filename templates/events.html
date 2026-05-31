@@ -2,76 +2,76 @@
 {% block title %}Events — BunkerVision{% endblock %}
 
 {% block content %}
-<div class="page-header d-flex align-items-center justify-content-between mb-3">
-  <div>
-    <h5 class="mb-0 fw-semibold">Bunkering Events</h5>
-    <div class="subtitle">All detected bunkering operations · {{ total }} total</div>
-  </div>
+<div class="page-header">
+  <h5>Bunkering Events</h5>
+  <div class="subtitle">All detected bunkering operations · {{ total }} total</div>
 </div>
 
 <div class="card">
   <div class="card-body p-0">
-    <table id="events-table" class="table table-dark table-hover mb-0" style="width:100%">
-      <thead>
-        <tr>
-          <th>Status</th>
-          <th>Bunker Vessel</th>
-          <th>Recipient</th>
-          <th>Started</th>
-          <th>Duration</th>
-          <th>Vol — duration</th>
-          <th>Vol — draught</th>
-          <th>Draught Δ</th>
-          <th>Position</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for ev in events %}
-        <tr>
-          <td>
-            {% if ev.open %}
-            <span class="badge" style="background:rgba(63,185,80,0.15);color:#3fb950;font-size:0.7rem;">Active</span>
-            {% else %}
-            <span class="badge" style="background:rgba(139,148,158,0.15);color:#8b949e;font-size:0.7rem;">Closed</span>
-            {% endif %}
-          </td>
-          <td class="fw-medium">{{ ev.bunker_name or '—' }}</td>
-          <td>{{ ev.recipient_name or ev.recipient_mmsi or '—' }}</td>
-          <td class="text-muted" style="white-space:nowrap;font-size:0.8rem;">{{ ev.start_ts[:16] if ev.start_ts else '—' }}</td>
-          <td>
-            {% if ev.open %}
-            <span style="color:#3fb950">Ongoing</span>
-            {% elif ev.duration_min %}
-            {{ ev.duration_min }} min
-            {% else %}—{% endif %}
-          </td>
-          <td>
-            {% if ev.estimated_mt %}
-            <span class="fw-medium">{{ '{:,.0f}'.format(ev.estimated_mt) }} mt</span>
-            {% else %}—{% endif %}
-          </td>
-          <td>
-            {% if ev.draught_vol_est %}
-            <span class="fw-medium" style="color:#58a6ff;">{{ '{:,.0f}'.format(ev.draught_vol_est) }} mt</span>
-            {% else %}<span class="text-muted">—</span>{% endif %}
-          </td>
-          <td style="font-size:0.82rem;">
-            {% if ev.draught_start and ev.draught_end %}
-            <span class="text-muted">{{ '%.1f'|format(ev.draught_start) }}→{{ '%.1f'|format(ev.draught_end) }}m</span>
-            {% if ev.draught_delta_m %}
-            <span style="color:#d29922"> −{{ '%.2f'|format(ev.draught_delta_m) }}m</span>
-            {% endif %}
-            {% else %}<span class="text-muted">—</span>{% endif %}
-          </td>
-          <td class="text-muted" style="font-size:0.78rem;">
-            {% if ev.lat and ev.lon %}
-            {{ '%.4f'|format(ev.lat) }}, {{ '%.4f'|format(ev.lon) }}
-            {% else %}—{% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-responsive">
+      <table id="events-table" class="table table-dark table-hover table-mobile-cards mb-0" style="width:100%">
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Bunker Vessel</th>
+            <th>Recipient</th>
+            <th>Started</th>
+            <th>Duration</th>
+            <th>Vol — duration</th>
+            <th>Vol — draught</th>
+            <th>Draught Δ</th>
+            <th>Position</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ev in events %}
+          <tr>
+            <td data-label="Status">
+              {% if ev.open %}
+              <span class="badge" style="background:rgba(63,185,80,0.15);color:#3fb950;font-size:0.7rem;">Active</span>
+              {% else %}
+              <span class="badge" style="background:rgba(139,148,158,0.15);color:#8b949e;font-size:0.7rem;">Closed</span>
+              {% endif %}
+            </td>
+            <td class="fw-medium" data-label="Bunker Vessel">{{ ev.bunker_name or '—' }}</td>
+            <td data-label="Recipient">{{ ev.recipient_name or ev.recipient_mmsi or '—' }}</td>
+            <td class="text-muted" data-label="Started" style="white-space:nowrap;font-size:0.8rem;">{{ ev.start_ts[:16] if ev.start_ts else '—' }}</td>
+            <td data-label="Duration">
+              {% if ev.open %}
+              <span style="color:#3fb950">Ongoing</span>
+              {% elif ev.duration_min %}
+              {{ ev.duration_min }} min
+              {% else %}—{% endif %}
+            </td>
+            <td data-label="Vol — duration">
+              {% if ev.estimated_mt %}
+              <span class="fw-medium">{{ '{:,.0f}'.format(ev.estimated_mt) }} mt</span>
+              {% else %}—{% endif %}
+            </td>
+            <td data-label="Vol — draught">
+              {% if ev.draught_vol_est %}
+              <span class="fw-medium" style="color:#58a6ff;">{{ '{:,.0f}'.format(ev.draught_vol_est) }} mt</span>
+              {% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td data-label="Draught Δ" style="font-size:0.82rem;">
+              {% if ev.draught_start and ev.draught_end %}
+              <span class="text-muted">{{ '%.1f'|format(ev.draught_start) }}→{{ '%.1f'|format(ev.draught_end) }}m</span>
+              {% if ev.draught_delta_m %}
+              <span style="color:#d29922"> −{{ '%.2f'|format(ev.draught_delta_m) }}m</span>
+              {% endif %}
+              {% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td class="text-muted" data-label="Position" style="font-size:0.78rem;">
+              {% if ev.lat and ev.lon %}
+              {{ '%.4f'|format(ev.lat) }}, {{ '%.4f'|format(ev.lon) }}
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 
