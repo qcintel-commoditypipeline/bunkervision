@@ -16,6 +16,9 @@ from config import (
     DEFAULT_PUMP_RATE_MT_MIN,
     DETECT_POLL_SECS,
     PROX_RADIUS_M,
+    PUMP_RATE_CALIB_SHRINKAGE,
+    PUMP_RATE_CALIBRATION_ENABLED,
+    PUMP_RATE_MIN_CALIB_MONTHS,
     STOP_MIN_DURATION,
     STOP_SOG_KT,
     port_for_coord,
@@ -32,25 +35,164 @@ def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * R * math.asin(math.sqrt(a))
 
 
-def _avg_pump_rate() -> float:
-    """Back-calculate pump rate from closed events, or fall back to prior."""
-    rows = db.query("""
-        SELECT AVG(estimated_mt / NULLIF(duration_min, 0))
-        FROM bunkering_events
-        WHERE open = FALSE AND duration_min > 30 AND estimated_mt > 0
-    """)
-    if rows and rows[0][0] is not None:
-        return float(rows[0][0])
-    # Try to derive from MPA monthly data with a fixed avg duration assumption (360 min)
-    rows = db.query("""
-        SELECT AVG(volume_mt / NULLIF(ships_count, 0)) / 360.0
-        FROM mpa_monthly
-        WHERE ships_count > 0 AND fuel_type = 'TOTAL'
-        LIMIT 1
-    """)
-    if rows and rows[0][0] is not None:
-        return float(rows[0][0])
+def _avg_pump_rate(port: str | None = None) -> float:
+    """
+    Return the pump rate (mt/min) used to convert event duration into tonnage.
+
+    HONEST NOTE ON METHODOLOGY
+    --------------------------
+    This is a CALIBRATED PROXY, not a physical measurement. We do not observe
+    actual mass-flow; we infer tonnage as `duration_min * pump_rate`. The only
+    legitimate way to set `pump_rate` is to compare a COMPLETE month of detected
+    aggregate signal against that month's published official total and scale to
+    match — i.e. `pump_rate = prior * (official / detected_at_prior)`, shrunk
+    toward the prior to avoid over-fitting a single noisy month.
+
+    The previous implementation was CIRCULAR: it averaged
+    `estimated_mt / duration_min` over closed events, but `estimated_mt` is
+    itself defined as `duration_min * pump_rate`, so the ratio is the constant
+    `pump_rate` for every row — the "average" just returned the prior. The MPA
+    fallback divided by `mpa_monthly.ships_count`, which the loader always
+    inserts as NULL, so it never fired either. Net effect: a frozen 3.5 mt/min.
+
+    New design:
+      * When PUMP_RATE_CALIBRATION_ENABLED is True AND we have at least
+        PUMP_RATE_MIN_CALIB_MONTHS complete, officially-published months for the
+        port, fit a shrinkage-regularised factor (see _fit_pump_rate).
+      * Otherwise fall back to DEFAULT_PUMP_RATE_MT_MIN, which is a DOCUMENTED
+        PRIOR, not a calibration.
+
+    As of 2026-05 we have only Apr+May 2026 of AIS history, only April has a
+    published official number, and April's AIS coverage is partial — so the fit
+    is NOT yet possible and we return the prior.
+    """
+    if PUMP_RATE_CALIBRATION_ENABLED:
+        fitted = _fit_pump_rate(port)
+        if fitted is not None:
+            return fitted
     return DEFAULT_PUMP_RATE_MT_MIN
+
+
+def _fit_pump_rate(port: str | None) -> float | None:
+    """
+    Mechanism for a per-port calibration factor (returns None until fittable).
+
+    Ratio method: for each COMPLETE month with a published official total,
+    compute (official_mt / detected_mt_at_prior). The detected signal at the
+    prior is `sum(duration_min) * DEFAULT_PUMP_RATE_MT_MIN`, so the calibrated
+    rate is `DEFAULT_PUMP_RATE_MT_MIN * mean(official / detected_at_prior)`,
+    then shrunk toward the prior by PUMP_RATE_CALIB_SHRINKAGE.
+
+    Returns None (caller uses the prior) unless there are at least
+    PUMP_RATE_MIN_CALIB_MONTHS complete official months — which is NOT the case
+    today. This is deliberately conservative: a single partial month (e.g. the
+    ramp-up April 2026) must never drive the live number.
+
+    NOTE: "complete month" detection here only counts months that have BOTH a
+    published official total and full AIS coverage. Coverage completeness is the
+    responsibility of the partial-month guard in demand_model; this function
+    simply requires enough official months to exist and returns None otherwise.
+    """
+    if port is None:
+        return None
+
+    # Official monthly totals available for this port (Singapore falls back to
+    # mpa_monthly). These define which months *could* anchor a calibration.
+    rows = db.query("""
+        SELECT YEAR(month), MONTH(month), volume_mt
+        FROM port_bunker_sales
+        WHERE port = ? AND fuel_type = 'TOTAL' AND volume_mt > 0
+    """, [port])
+    if not rows and port == "singapore":
+        rows = db.query("""
+            SELECT YEAR(month), MONTH(month), volume_mt
+            FROM mpa_monthly
+            WHERE fuel_type = 'TOTAL' AND volume_mt > 0
+        """)
+
+    ratios: list[float] = []
+    for yr, mo, official in rows:
+        det = db.query("""
+            SELECT COALESCE(SUM(duration_min), 0)
+            FROM bunkering_events
+            WHERE open = FALSE AND port = ?
+              AND YEAR(start_ts) = ? AND MONTH(start_ts) = ?
+        """, [port, yr, mo])
+        total_min = float(det[0][0]) if det and det[0][0] else 0.0
+        detected_at_prior = total_min * DEFAULT_PUMP_RATE_MT_MIN
+        if detected_at_prior > 0 and official and official > 0:
+            ratios.append(float(official) / detected_at_prior)
+
+    # Require enough independent official months before trusting a fit.
+    if len(ratios) < PUMP_RATE_MIN_CALIB_MONTHS:
+        return None
+
+    raw_ratio = sum(ratios) / len(ratios)
+    # Shrink the ratio toward 1.0 (i.e. toward the prior) to regularise.
+    w = PUMP_RATE_CALIB_SHRINKAGE
+    shrunk_ratio = w * 1.0 + (1.0 - w) * raw_ratio
+    return DEFAULT_PUMP_RATE_MT_MIN * shrunk_ratio
+
+
+def aggregate_closed_event_mt(port: str, year: int, month: int) -> tuple[int, float]:
+    """
+    Return (event_count, volume_mt) of CLOSED events for a port-month, applying
+    event-quality filtering and pair-dedup when EVENT_QUALITY_FILTER_ENABLED.
+
+    Behaviour is gated so the legacy path (flag False) returns exactly the old
+    aggregate: COUNT(*) and SUM(estimated_mt) over all closed events.
+
+    When the flag is True:
+      * `event_count` counts ALL closed events (junk events are still logged /
+        counted — only their VOLUME is excluded), matching the task spec.
+      * `volume_mt` sums only events with duration >= MIN_BUNKER_EVENT_MIN,
+        after collapsing same bunker<->recipient re-openings whose inter-event
+        gap is < DEDUP_GAP_MIN minutes into one logical event.
+    """
+    from config import (
+        DEDUP_GAP_MIN,
+        EVENT_QUALITY_FILTER_ENABLED,
+        MIN_BUNKER_EVENT_MIN,
+    )
+
+    base = db.query("""
+        SELECT COUNT(*), COALESCE(SUM(estimated_mt), 0)
+        FROM bunkering_events
+        WHERE open = FALSE AND port = ?
+          AND YEAR(start_ts) = ? AND MONTH(start_ts) = ?
+    """, [port, year, month])
+    event_count = int(base[0][0]) if base else 0
+    legacy_mt = float(base[0][1]) if base else 0.0
+
+    if not EVENT_QUALITY_FILTER_ENABLED:
+        return event_count, legacy_mt
+
+    # Quality-filtered, deduped volume. Count still reflects ALL events.
+    rows = db.query("""
+        SELECT bunker_mmsi, recipient_mmsi, start_ts, end_ts, duration_min, estimated_mt
+        FROM bunkering_events
+        WHERE open = FALSE AND port = ?
+          AND YEAR(start_ts) = ? AND MONTH(start_ts) = ?
+          AND duration_min >= ?
+        ORDER BY bunker_mmsi, recipient_mmsi, start_ts
+    """, [port, year, month, MIN_BUNKER_EVENT_MIN])
+
+    volume_mt = 0.0
+    prev = None  # (bunker, recipient, end_ts, mt)
+    gap_secs = DEDUP_GAP_MIN * 60
+    for b, rc, st, en, _dur, mt in rows:
+        mt = float(mt or 0.0)
+        if (prev is not None and prev[0] == b and prev[1] == rc
+                and st is not None and prev[2] is not None
+                and (st - prev[2]).total_seconds() < gap_secs):
+            # Re-opening of the same pair: fold tonnage into the prior event.
+            volume_mt += mt
+            prev = (b, rc, en or prev[2], prev[3] + mt)
+        else:
+            volume_mt += mt
+            prev = (b, rc, en, mt)
+
+    return event_count, volume_mt
 
 
 def _get_stopped_bunkers(window_minutes: int = 30) -> list[dict]:
@@ -163,14 +305,14 @@ def _draught_vol_estimate(mmsi: str, start_ts: datetime, end_ts: datetime, dwt: 
 def _close_stale_events() -> None:
     """Close any open events where the bunker vessel has been moving for 5+ minutes."""
     open_events = db.query("""
-        SELECT e.id, e.bunker_mmsi, e.start_ts, bv.capacity_mt
+        SELECT e.id, e.bunker_mmsi, e.start_ts, bv.capacity_mt, e.port
         FROM bunkering_events e
         LEFT JOIN bunker_vessels bv ON bv.mmsi = e.bunker_mmsi OR bv.imo = e.bunker_imo
         WHERE e.open = TRUE
     """)
-    pump_rate = _avg_pump_rate()
 
-    for ev_id, bunker_mmsi, start_ts, dwt in open_events:
+    for ev_id, bunker_mmsi, start_ts, dwt, port in open_events:
+        pump_rate = _avg_pump_rate(port)
         rows = db.query("""
             SELECT MAX(sog), MAX(ts) FROM ais_positions
             WHERE mmsi = ? AND ts >= NOW() - INTERVAL '10 minutes'

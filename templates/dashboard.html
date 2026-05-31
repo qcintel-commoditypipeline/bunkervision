@@ -2,14 +2,14 @@
 {% block title %}{{ port_cfg.name }} — BunkerVision{% endblock %}
 
 {% block content %}
-<div class="page-header d-flex align-items-center justify-content-between mb-2">
+<div class="page-header d-flex align-items-center justify-content-between mb-3">
   <div>
-    <h5 class="mb-0 fw-semibold">{{ port_cfg.name }} Bunker Demand Tracker</h5>
+    <h5 class="mb-0 fw-semibold">{{ port_cfg.name }} Bunker Demand</h5>
     <div class="subtitle">
       {% if port_cfg.has_registry %}
-        Real-time bunkering event detection · AIS-derived demand estimation
+        AIS-derived nowcast vs official sales · model track record
       {% elif port_cfg.data_source %}
-        Historical demand data · Live AIS vessel positions
+        Historical demand data · live AIS vessel positions
       {% else %}
         Live AIS vessel positions
       {% endif %}
@@ -18,38 +18,57 @@
   <div class="text-muted" style="font-size:0.75rem" id="last-updated"></div>
 </div>
 
-<!-- KPI row -->
-<div class="row g-2 mb-3" id="kpi-row">
-  {% if port_cfg.has_registry %}
-  <div class="col-6 col-md-3">
-    <div class="kpi-card" id="kpi-active">
-      <div class="kpi-label">Active Events</div>
-      <div class="kpi-val" id="kv-active">—</div>
-      <div class="kpi-sub">bunkering right now</div>
+{% if port_cfg.has_registry %}
+{# ── HEADLINE: the number is the hero ───────────────────────────────────────── #}
+<div class="row g-3 mb-3">
+  <!-- Hero nowcast -->
+  <div class="col-12 col-lg-5">
+    <div class="hero-card" id="hero-nowcast">
+      <div class="hero-label">Current-Month Nowcast</div>
+      <div class="hero-number"><span id="hero-proj">—</span></div>
+      <div class="hero-sub" id="hero-proj-sub">projecting full-month demand</div>
+      <div class="mt-3">
+        <span class="verdict-pill verdict-neu" id="hero-verdict">awaiting data</span>
+      </div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
-    <div class="kpi-card" id="kpi-vessels">
-      <div class="kpi-label">Tracked Vessels</div>
-      <div class="kpi-val" id="kv-vessels">—</div>
-      <div class="kpi-sub" id="kv-vessels-sub">bunker craft in registry</div>
+  <!-- Supporting figures -->
+  <div class="col-12 col-lg-7">
+    <div class="row g-2 h-100">
+      <div class="col-6">
+        <div class="kpi-card h-100">
+          <div class="kpi-label">Gap vs Last Official</div>
+          <div class="kpi-val" id="kv-gap">—</div>
+          <div class="kpi-sub" id="kv-gap-sub">nowcast − last official</div>
+        </div>
+      </div>
+      <div class="col-6">
+        <div class="kpi-card h-100">
+          <div class="kpi-label">Last Official</div>
+          <div class="kpi-val" id="kv-official">—</div>
+          <div class="kpi-sub" id="kv-official-sub">most recent MPA figure</div>
+        </div>
+      </div>
+      <div class="col-6">
+        <div class="kpi-card h-100">
+          <div class="kpi-label">Detected MTD</div>
+          <div class="kpi-val" id="kv-mtd">—</div>
+          <div class="kpi-sub" id="kv-mtd-sub">events so far this month</div>
+        </div>
+      </div>
+      <div class="col-6">
+        <div class="kpi-card h-100">
+          <div class="kpi-label">Live / Active</div>
+          <div class="kpi-val" id="kv-live">—</div>
+          <div class="kpi-sub" id="kv-live-sub">AIS in port · active events</div>
+        </div>
+      </div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
-    <div class="kpi-card" id="kpi-mtd">
-      <div class="kpi-label">MTD Estimated Demand</div>
-      <div class="kpi-val" id="kv-mtd">—</div>
-      <div class="kpi-sub" id="kv-mtd-sub">mt detected this month</div>
-    </div>
-  </div>
-  <div class="col-6 col-md-3">
-    <div class="kpi-card" id="kpi-proj">
-      <div class="kpi-label">Projected Full-Month</div>
-      <div class="kpi-val" id="kv-proj">—</div>
-      <div class="kpi-sub" id="kv-proj-sub">vs seasonal average</div>
-    </div>
-  </div>
-  {% else %}
+</div>
+{% else %}
+{# ── Non-registry port: lightweight KPI row ─────────────────────────────────── #}
+<div class="row g-2 mb-3">
   <div class="col-6 col-md-3">
     <div class="kpi-card">
       <div class="kpi-label">Live AIS Vessels</div>
@@ -72,24 +91,106 @@
     </div>
   </div>
   <div class="col-6 col-md-3">
-    <div class="kpi-card" id="kpi-no-registry">
+    <div class="kpi-card">
       <div class="kpi-label">Detection</div>
       <div class="kpi-val" style="font-size:1rem;color:#8b949e;">No Registry</div>
       <div class="kpi-sub">AIS tracking only</div>
     </div>
   </div>
-  {% endif %}
+</div>
+{% endif %}
+
+{# ── Charts ──────────────────────────────────────────────────────────────────── #}
+<div class="row g-2 mb-3">
+  <div class="col-12 col-xl-7">
+    <div class="card h-100">
+      <div class="card-body pb-2">
+        <div class="section-label">
+          {% if port_cfg.has_registry %}
+            {{ port_cfg.name | upper }} BUNKER SALES — AIS PROJECTED VS OFFICIAL
+          {% else %}
+            {{ port_cfg.name | upper }} BUNKER SALES{% if port_cfg.data_frequency == 'quarterly' %} (QUARTERLY){% endif %}
+            {% if not port_cfg.data_source %}<span class="text-muted" style="font-size:0.75rem"> — AIS only, no official data</span>{% endif %}
+          {% endif %}
+        </div>
+        <div id="demand-chart" style="min-height:300px;"></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-xl-5">
+    <div class="card h-100">
+      <div class="card-body pb-2">
+        <div class="section-label">FUEL SPLIT</div>
+        <div id="fuel-split-chart" style="min-height:300px;"></div>
+      </div>
+    </div>
+  </div>
 </div>
 
-<!-- Map + event feed -->
+{% if port_cfg.has_registry %}
+{# ── Track record / accuracy panel ───────────────────────────────────────────── #}
 <div class="row g-2 mb-3">
-  <div class="col-12 col-xl-8">
-    <div class="card" style="height:520px">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <span class="section-label mb-0">MODEL TRACK RECORD</span>
+          <span class="text-muted" style="font-size:0.72rem;" id="acc-note"></span>
+        </div>
+
+        <!-- Summary stats -->
+        <div class="row g-2 mb-3" id="acc-summary">
+          <div class="col-6 col-md-3 col-xl"><div class="acc-stat-val" id="acc-graded">—</div><div class="acc-stat-label">Months Graded</div></div>
+          <div class="col-6 col-md-3 col-xl"><div class="acc-stat-val" id="acc-mape">—</div><div class="acc-stat-label">Mean Abs % Error</div></div>
+          <div class="col-6 col-md-3 col-xl"><div class="acc-stat-val" id="acc-w10">—</div><div class="acc-stat-label">Within 10%</div></div>
+          <div class="col-6 col-md-3 col-xl"><div class="acc-stat-val" id="acc-w5">—</div><div class="acc-stat-label">Within 5%</div></div>
+          <div class="col-6 col-md-3 col-xl"><div class="acc-stat-val" id="acc-bias">—</div><div class="acc-stat-label">Bias</div></div>
+        </div>
+
+        <!-- Per-month table -->
+        <div class="table-responsive">
+          <table class="table table-dark table-hover mb-0 acc-table" style="width:100%">
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th class="text-end">Estimated</th>
+                <th class="text-end">Official</th>
+                <th class="text-end">% Error</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="acc-tbody">
+              <tr><td colspan="5" class="text-center text-muted py-3">Loading track record…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── Live map + feed (secondary — behind a tab) ──────────────────────────────── #}
+<ul class="nav nav-pills mb-2" id="ops-tabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="tab-map-btn" data-bs-toggle="pill"
+            data-bs-target="#tab-map" type="button" role="tab">Live Map</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="tab-feed-btn" data-bs-toggle="pill"
+            data-bs-target="#tab-feed" type="button" role="tab">
+      {% if port_cfg.has_registry %}Event Feed{% else %}Vessel Feed{% endif %}
+    </button>
+  </li>
+</ul>
+<div class="tab-content">
+  <div class="tab-pane fade show active" id="tab-map" role="tabpanel">
+    <div class="card" style="height:420px">
       <div id="map" style="height:100%;border-radius:8px;"></div>
     </div>
   </div>
-  <div class="col-12 col-xl-4">
-    <div class="card" style="height:520px;overflow:hidden;display:flex;flex-direction:column;">
+  <div class="tab-pane fade" id="tab-feed" role="tabpanel">
+    <div class="card" style="height:420px;overflow:hidden;display:flex;flex-direction:column;">
       <div class="px-3 pt-3 pb-2 d-flex align-items-center justify-content-between border-bottom border-secondary border-opacity-25">
         <span class="section-label mb-0">
           {% if port_cfg.has_registry %}Live Event Feed{% else %}Live Vessel Feed{% endif %}
@@ -98,25 +199,6 @@
               style="background:rgba(88,166,255,0.15);color:#58a6ff;font-size:0.7rem">0 active</span>
       </div>
       <div id="event-feed" style="overflow-y:auto;flex:1;padding:0.5rem 0.75rem;font-size:0.8rem;"></div>
-    </div>
-  </div>
-</div>
-
-<!-- Demand chart -->
-<div class="row g-2">
-  <div class="col-12">
-    <div class="card">
-      <div class="card-body pb-2">
-        <div class="section-label">
-          {% if port_cfg.has_registry %}
-            {{ port_cfg.name | upper }} BUNKER SALES - AIS PROJECTED VS OFFICIAL
-          {% else %}
-            {{ port_cfg.name | upper }} BUNKER SALES{% if port_cfg.data_frequency == 'quarterly' %} (QUARTERLY){% endif %}
-            {% if not port_cfg.data_source %}<span class="text-muted" style="font-size:0.75rem"> - AIS only, no official data</span>{% endif %}
-          {% endif %}
-        </div>
-        <div id="demand-chart" style="min-height:260px;"></div>
-      </div>
     </div>
   </div>
 </div>
@@ -130,7 +212,11 @@ const MAPBOX_TOKEN = {{ mapbox_token | tojson }};
 const PORT_CFG     = {{ port_cfg | tojson }};
 // CURRENT_PORT is already set in base.html
 
-// ── KPI polling ────────────────────────────────────────────────────────────────
+const fmtK   = mt => (mt || mt === 0) ? Math.round(mt / 1000).toLocaleString() + 'k mt' : '—';
+const fmtPct = (p, signed) => (p === null || p === undefined) ? '—'
+  : (signed && p >= 0 ? '+' : '') + p.toFixed(1) + '%';
+
+// ── Headline KPIs ────────────────────────────────────────────────────────────
 async function refreshKPIs() {
   try {
     const [stats, demand] = await Promise.all([
@@ -139,60 +225,144 @@ async function refreshKPIs() {
     ]);
 
     if (PORT_CFG.has_registry) {
-      document.getElementById('kv-active').textContent  = stats.active_events.toLocaleString();
-      document.getElementById('kv-vessels').textContent = stats.vessel_count.toLocaleString();
-      document.getElementById('kv-vessels-sub').textContent = `${stats.live_positions.toLocaleString()} live on AIS`;
+      const proj = demand.projected_month_mt;
+      const pct  = demand.pct_vs_seasonal;
 
-      document.getElementById('kv-mtd').textContent = demand.estimated_mt
-        ? Math.round(demand.estimated_mt / 1000).toLocaleString() + 'k mt' : '—';
-      document.getElementById('kv-mtd-sub').textContent =
-        `${demand.event_count} events · day ${demand.days_elapsed}/${demand.days_in_month}`;
+      // Hero number
+      const heroEl = document.getElementById('hero-proj');
+      heroEl.innerHTML = proj
+        ? Math.round(proj / 1000).toLocaleString() + '<span class="unit">k mt</span>'
+        : '—';
+      document.getElementById('hero-proj-sub').textContent =
+        `day ${demand.days_elapsed}/${demand.days_in_month} · ${demand.event_count} events detected`;
 
-      const proj  = demand.projected_month_mt;
-      const pct   = demand.pct_vs_seasonal;
-      document.getElementById('kv-proj').textContent = proj ? Math.round(proj/1000).toLocaleString()+'k mt' : '—';
-      const projEl = document.getElementById('kpi-proj');
-      projEl.classList.remove('kpi-accent-pos','kpi-accent-neg');
-      let subText = '';
+      // Verdict pill (% vs seasonal average)
+      const card    = document.getElementById('hero-nowcast');
+      const verdict = document.getElementById('hero-verdict');
+      card.classList.remove('hero-accent-pos', 'hero-accent-neg');
+      verdict.classList.remove('verdict-pos', 'verdict-neg', 'verdict-neu');
       if (pct !== null && pct !== undefined) {
-        const sign = pct >= 0 ? '+' : '';
-        subText = `${sign}${pct}% vs seasonal avg`;
-        projEl.classList.add(pct >= 0 ? 'kpi-accent-pos' : 'kpi-accent-neg');
-      } else if (demand.seasonal_avg_mt) {
-        subText = `seasonal avg ${Math.round(demand.seasonal_avg_mt/1000).toLocaleString()}k mt`;
+        if (pct >= 0) { card.classList.add('hero-accent-pos'); verdict.classList.add('verdict-pos'); }
+        else          { card.classList.add('hero-accent-neg'); verdict.classList.add('verdict-neg'); }
+        verdict.textContent = `${fmtPct(pct, true)} vs seasonal average`;
+      } else {
+        verdict.classList.add('verdict-neu');
+        verdict.textContent = demand.seasonal_avg_mt
+          ? `seasonal avg ${fmtK(demand.seasonal_avg_mt)}` : 'awaiting data';
       }
-      document.getElementById('kv-proj-sub').textContent = subText;
 
-      const activeEl = document.getElementById('kpi-active');
-      activeEl.classList.remove('kpi-accent-pos','kpi-accent-neg');
-      if (stats.active_events > 0) activeEl.classList.add('kpi-accent-pos');
+      // Gap vs last official
+      const gapEl    = document.getElementById('kv-gap');
+      const gapSubEl = document.getElementById('kv-gap-sub');
+      if (proj && demand.last_official_mt) {
+        const gap    = proj - demand.last_official_mt;
+        const gapPct = (gap / demand.last_official_mt) * 100;
+        const sign   = gap >= 0 ? '+' : '−';
+        gapEl.textContent = sign + fmtK(Math.abs(gap));
+        gapEl.style.color = gap >= 0 ? 'var(--pos)' : 'var(--neg)';
+        gapSubEl.textContent = `${fmtPct(gapPct, true)} vs last official`;
+      } else {
+        gapEl.textContent = '—';
+        gapSubEl.textContent = 'nowcast − last official';
+      }
+
+      // Last official
+      document.getElementById('kv-official').textContent = fmtK(demand.last_official_mt);
+      document.getElementById('kv-official-sub').textContent = demand.last_official_month
+        ? demand.last_official_month.slice(0, 7) : 'most recent MPA figure';
+
+      // Detected MTD
+      document.getElementById('kv-mtd').textContent = fmtK(demand.estimated_mt);
+      document.getElementById('kv-mtd-sub').textContent = `${demand.event_count} events`;
+
+      // Live / active
+      document.getElementById('kv-live').textContent = stats.live_positions.toLocaleString();
+      document.getElementById('kv-live-sub').textContent =
+        `${stats.live_positions.toLocaleString()} on AIS · ${stats.active_events} active`;
 
     } else {
-      // Non-registry port
       const liveEl = document.getElementById('kv-live');
       if (liveEl) liveEl.textContent = stats.live_positions.toLocaleString();
 
       const lastVolEl   = document.getElementById('kv-last-vol');
       const lastMonthEl = document.getElementById('kv-last-month');
-      if (lastVolEl && demand.last_official_mt) {
-        lastVolEl.textContent = Math.round(demand.last_official_mt / 1000).toLocaleString() + 'k mt';
-      }
-      if (lastMonthEl && demand.last_official_month) {
-        lastMonthEl.textContent = demand.last_official_month.slice(0, 7);
-      }
+      if (lastVolEl && demand.last_official_mt) lastVolEl.textContent = fmtK(demand.last_official_mt);
+      if (lastMonthEl && demand.last_official_month) lastMonthEl.textContent = demand.last_official_month.slice(0, 7);
 
       const seasonalEl = document.getElementById('kv-seasonal');
-      if (seasonalEl && demand.seasonal_avg_mt) {
-        seasonalEl.textContent = Math.round(demand.seasonal_avg_mt / 1000).toLocaleString() + 'k mt';
-      }
+      if (seasonalEl && demand.seasonal_avg_mt) seasonalEl.textContent = fmtK(demand.seasonal_avg_mt);
     }
 
-    document.getElementById('last-updated').textContent =
-      'Updated ' + new Date().toLocaleTimeString();
+    document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
   } catch(e) {}
 }
 
-// ── Event / vessel feed ────────────────────────────────────────────────────────
+// ── Accuracy / track record ────────────────────────────────────────────────────
+function accStatusPill(status) {
+  if (status === 'pending_official')
+    return '<span class="acc-status acc-status-pending">awaiting official</span>';
+  if (status === 'partial_month')
+    return '<span class="acc-status acc-status-pending">partial month</span>';
+  if (status === 'graded')
+    return '<span class="acc-status acc-status-graded">graded</span>';
+  if (status === 'miss')
+    return '<span class="acc-status acc-status-miss">large miss</span>';
+  return `<span class="acc-status acc-status-pending">${status || '—'}</span>`;
+}
+
+async function refreshAccuracy() {
+  const tbody = document.getElementById('acc-tbody');
+  if (!tbody) return;
+  let data;
+  try {
+    data = await fetch(`/api/accuracy?port=${CURRENT_PORT}`).then(r => r.json());
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Track record unavailable</td></tr>';
+    return;
+  }
+
+  const rows = (data && data.rows) || [];
+  const sum  = (data && data.summary) || {};
+
+  // Summary stats — graded months only (partial months are excluded from the headline stat)
+  document.getElementById('acc-graded').textContent = sum.months_graded ?? '—';
+  document.getElementById('acc-mape').textContent   = (sum.mean_abs_pct_err  != null) ? sum.mean_abs_pct_err.toFixed(1)  + '%' : '—';
+  document.getElementById('acc-w10').textContent    = (sum.within_10pct      != null) ? sum.within_10pct                       : '—';
+  document.getElementById('acc-w5').textContent     = (sum.within_5pct       != null) ? sum.within_5pct                        : '—';
+  const bias = sum.bias_pct;
+  const biasEl = document.getElementById('acc-bias');
+  biasEl.textContent = (bias != null) ? (bias >= 0 ? '+' : '') + bias.toFixed(1) + '%' : '—';
+  biasEl.style.color = (bias == null) ? '' : (bias >= 0 ? 'var(--neg)' : 'var(--accent)');
+
+  document.getElementById('acc-note').textContent = data && data.error
+    ? 'track record pending integration' : '';
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">No graded months yet — calls are scored once official figures publish.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(r => {
+    const partial = r.status === 'partial_month';
+    const est = (r.estimated_mt != null) ? fmtK(r.estimated_mt) : '—';
+    const off = (r.official_mt  != null) ? fmtK(r.official_mt)  : '—';
+    let errCell = '—';
+    if (r.signed_pct_err != null) {
+      const cls = r.signed_pct_err >= 0 ? 'err-pos' : 'err-neg';
+      errCell = `<span class="${cls}">${(r.signed_pct_err >= 0 ? '+' : '') + r.signed_pct_err.toFixed(1)}%</span>`;
+    }
+    const label = r.label || `${r.year || ''}-${String(r.month || '').padStart(2, '0')}`;
+    return `<tr class="${partial ? 'acc-row-partial' : ''}">
+      <td class="fw-medium">${label}</td>
+      <td class="text-end">${est}</td>
+      <td class="text-end">${off}</td>
+      <td class="text-end">${errCell}</td>
+      <td>${accStatusPill(r.status)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Event / vessel feed ──────────────────────────────────────────────────────
 async function refreshEventFeed() {
   if (PORT_CFG.has_registry) {
     const events = await fetch(`/api/events?limit=30&port=${CURRENT_PORT}`).then(r => r.json()).catch(() => []);
@@ -219,7 +389,6 @@ async function refreshEventFeed() {
     }).join('') || '<div style="color:#8b949e;padding:1rem 0;">No events detected yet</div>';
 
   } else {
-    // Show live vessel list for non-registry ports
     try {
       const positions = await fetch(`/api/positions?port=${CURRENT_PORT}`).then(r => r.json());
       const feed  = document.getElementById('event-feed');
@@ -238,14 +407,27 @@ async function refreshEventFeed() {
   }
 }
 
-// ── Demand chart ───────────────────────────────────────────────────────────────
+// ── Charts ─────────────────────────────────────────────────────────────────────
 loadChart('demand-chart', `/api/demand_chart?port=${CURRENT_PORT}`);
+loadChart('fuel-split-chart', `/api/fuel_split_chart?port=${CURRENT_PORT}`);
 
-// ── Init & polling ─────────────────────────────────────────────────────────────
+// Resize Plotly charts when the map tab pills change the layout / on tab show
+document.querySelectorAll('#ops-tabs button[data-bs-toggle="pill"]').forEach(b => {
+  b.addEventListener('shown.bs.tab', () => {
+    if (window.map && map.resize) map.resize();
+  });
+});
+
+// ── Init & polling ───────────────────────────────────────────────────────────
 refreshKPIs();
 refreshEventFeed();
+refreshAccuracy();
 setInterval(refreshKPIs, 30_000);
 setInterval(refreshEventFeed, 20_000);
-setInterval(() => loadChart('demand-chart', `/api/demand_chart?port=${CURRENT_PORT}`), 120_000);
+setInterval(refreshAccuracy, 300_000);
+setInterval(() => {
+  loadChart('demand-chart', `/api/demand_chart?port=${CURRENT_PORT}`);
+  loadChart('fuel-split-chart', `/api/fuel_split_chart?port=${CURRENT_PORT}`);
+}, 120_000);
 </script>
 {% endblock %}

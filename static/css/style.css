@@ -194,3 +194,57 @@ table.dataTable thead th { cursor: pointer; }
   font-size: 0.82rem;
 }
 .btn-outline-secondary:hover { border-color: var(--accent); color: var(--text); }
+
+/* ── Headline hero ──────────────────────────────────────────────────────────── */
+.hero-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.4rem 1.6rem;
+  height: 100%;
+}
+.hero-card.hero-accent-pos { border-left: 4px solid var(--pos); }
+.hero-card.hero-accent-neg { border-left: 4px solid var(--neg); }
+.hero-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.35rem;
+}
+.hero-number {
+  font-size: 2.6rem;
+  font-weight: 700;
+  line-height: 1.05;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+.hero-number .unit { font-size: 1.1rem; font-weight: 600; color: var(--muted); margin-left: 0.25rem; }
+.hero-sub { font-size: 0.82rem; color: var(--muted); margin-top: 0.4rem; }
+.verdict-pill {
+  display: inline-block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+}
+.verdict-pos { background: rgba(63,185,80,0.15);  color: var(--pos); }
+.verdict-neg { background: rgba(248,81,73,0.15);  color: var(--neg); }
+.verdict-neu { background: rgba(139,148,158,0.15); color: var(--muted); }
+
+/* ── Accuracy / track record ────────────────────────────────────────────────── */
+.acc-stat-val   { font-size: 1.25rem; font-weight: 700; color: var(--text); }
+.acc-stat-label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.acc-table td, .acc-table th { font-size: 0.8rem; }
+.acc-row-partial { opacity: 0.5; }
+.acc-status {
+  font-size: 0.7rem;
+  padding: 0.08rem 0.45rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.acc-status-graded  { background: rgba(63,185,80,0.15);  color: var(--pos); }
+.acc-status-miss    { background: rgba(248,81,73,0.15);  color: var(--neg); }
+.acc-status-pending { background: rgba(139,148,158,0.15); color: var(--muted); }
+.err-pos { color: var(--neg); }
+.err-neg { color: var(--accent); }

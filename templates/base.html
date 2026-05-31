@@ -21,7 +21,11 @@
       <ul class="navbar-nav me-auto gap-1">
         <li class="nav-item">
           <a class="nav-link {% if request.path == '/' %}active{% endif %}"
-             href="/?port={{ current_port | default('singapore') }}">Dashboard</a>
+             href="/?port={{ current_port | default('singapore') }}">Headline</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.path == '/admin' %}active{% endif %}"
+             href="/admin?port={{ current_port | default('singapore') }}">Admin</a>
         </li>
         <li class="nav-item">
           <a class="nav-link {% if request.path == '/events' %}active{% endif %}" href="/events">Events</a>

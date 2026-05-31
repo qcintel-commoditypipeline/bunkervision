@@ -106,6 +106,36 @@ def vessels_page():
     )
 
 
+@app.route("/admin")
+def admin_page():
+    """Operator/admin tooling: registry management, AIS discovery, Equasis scans.
+    Moved off the executive headline view. The vessel registry table lives here too."""
+    port = _get_port()
+    rows = db.query("""
+        SELECT bv.imo, bv.mmsi, bv.name, bv.port, bv.licensee, bv.capacity_mt,
+               bv.last_updated,
+               COUNT(be.id) AS event_count
+        FROM bunker_vessels bv
+        LEFT JOIN bunkering_events be ON be.bunker_imo = bv.imo
+        GROUP BY bv.imo, bv.mmsi, bv.name, bv.port, bv.licensee, bv.capacity_mt, bv.last_updated
+        ORDER BY event_count DESC, bv.name
+    """)
+    vessels = [
+        {"imo": r[0], "mmsi": r[1], "name": r[2], "port": r[3] or "singapore",
+         "licensee": r[4], "capacity_mt": r[5], "last_updated": str(r[6]), "event_count": r[7]}
+        for r in rows
+    ]
+    port_counts: dict[str, int] = {}
+    for v in vessels:
+        p = v["port"]
+        port_counts[p] = port_counts.get(p, 0) + 1
+
+    return render_template(
+        "admin.html", vessels=vessels, ports=PORTS,
+        current_port=port, port_counts=port_counts,
+    )
+
+
 # ── API ────────────────────────────────────────────────────────────────────────
 
 @app.route("/api/positions")
@@ -249,6 +279,22 @@ def api_stats():
         "live_positions": live_count,
         "updated": datetime.now(timezone.utc).isoformat(),
     })
+
+
+@app.route("/api/accuracy")
+def api_accuracy():
+    """Model track-record for a port. Defensive: the `accuracy` module is owned by
+    another agent and may not exist yet — never crash, return empty shape on error."""
+    try:
+        import accuracy
+        return jsonify(accuracy.accuracy_report(request.args.get("port", "singapore")))
+    except Exception as e:
+        return jsonify({
+            "port": request.args.get("port", "singapore"),
+            "rows": [],
+            "summary": {},
+            "error": str(e),
+        })
 
 
 @app.route("/api/registry/candidates")

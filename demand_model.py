@@ -61,14 +61,10 @@ def running_demand_estimate(port: str = "singapore",
     open_mt      = 0.0
 
     if has_registry:
-        rows = db.query("""
-            SELECT COUNT(*), COALESCE(SUM(estimated_mt), 0)
-            FROM bunkering_events
-            WHERE open = FALSE AND port = ?
-              AND YEAR(start_ts) = ? AND MONTH(start_ts) = ?
-        """, [port, year, month])
-        event_count  = int(rows[0][0]) if rows else 0
-        estimated_mt = float(rows[0][1]) if rows else 0.0
+        # Quality-filter / dedup are applied inside aggregate_closed_event_mt and
+        # are gated by config flags (legacy aggregate when flags default to off).
+        from event_detector import _avg_pump_rate, aggregate_closed_event_mt
+        event_count, estimated_mt = aggregate_closed_event_mt(port, year, month)
 
         open_rows = db.query("""
             SELECT id, start_ts FROM bunkering_events
@@ -76,8 +72,7 @@ def running_demand_estimate(port: str = "singapore",
               AND YEAR(start_ts) = ? AND MONTH(start_ts) = ?
         """, [port, year, month])
 
-        from event_detector import _avg_pump_rate
-        pump_rate = _avg_pump_rate()
+        pump_rate = _avg_pump_rate(port)
         now = datetime.now(timezone.utc)
         for _, start_ts in open_rows:
             if start_ts:
@@ -130,31 +125,75 @@ def running_demand_estimate(port: str = "singapore",
 
 # ── Month-end snapshot ─────────────────────────────────────────────────────────
 
+def _month_coverage_fraction(port: str, year: int, month: int) -> float:
+    """
+    Fraction of the calendar month spanned by detected events for this port.
+
+    Returns (last_event_day - first_event_day + 1) / days_in_month, i.e. the
+    span of detected activity. A month the system only watched for the back half
+    (e.g. the system turned on mid-April 2026) yields a low fraction and is
+    treated as partial by the guard.
+    """
+    days_in_month = calendar.monthrange(year, month)[1]
+    rows = db.query("""
+        SELECT MIN(start_ts), MAX(start_ts)
+        FROM bunkering_events
+        WHERE port = ? AND YEAR(start_ts) = ? AND MONTH(start_ts) = ?
+    """, [port, year, month])
+    if not rows or rows[0][0] is None or rows[0][1] is None:
+        return 0.0
+    first_day = rows[0][0].day
+    last_day  = rows[0][1].day
+    return (last_day - first_day + 1) / days_in_month
+
+
 def save_month_estimate(port: str, year: int, month: int) -> bool:
     """
-    Snapshot the projected total for a completed month into monthly_demand_estimates.
+    Snapshot the total for a completed month into monthly_demand_estimates.
     Only saves if the port has a registry and the month has events.
     Returns True if saved, False if skipped.
+
+    Partial-month guard (PARTIAL_MONTH_GUARD_ENABLED): a month whose detected
+    AIS coverage clearly does not span the full calendar month is recorded with
+    is_partial=TRUE (when the column exists) rather than graded as complete. The
+    system turned on mid-April 2026, so April is a ramp artifact and must not be
+    presented as a finished month. The guard defaults OFF so deploying this code
+    does not change existing behaviour until the flag is flipped.
     """
+    from config import MONTH_COVERAGE_MIN_FRACTION, PARTIAL_MONTH_GUARD_ENABLED
+
     if not PORTS.get(port, {}).get("has_registry", False):
         return False
 
-    rows = db.query("""
-        SELECT COUNT(*), COALESCE(SUM(estimated_mt), 0)
-        FROM bunkering_events
-        WHERE open = FALSE AND port = ?
-          AND YEAR(start_ts) = ? AND MONTH(start_ts) = ?
-    """, [port, year, month])
-    event_count  = int(rows[0][0]) if rows else 0
-    estimated_mt = float(rows[0][1]) if rows else 0.0
+    from event_detector import aggregate_closed_event_mt
+    event_count, estimated_mt = aggregate_closed_event_mt(port, year, month)
 
     if event_count == 0:
         return False
 
-    days_in_month = calendar.monthrange(year, month)[1]
-    projected     = estimated_mt / days_in_month * days_in_month  # full month = sum of closed events
-    seasonal      = seasonal_avg_monthly_volume(month, port)
-    pct           = round((projected / seasonal - 1) * 100, 1) if seasonal and seasonal > 0 else None
+    if PARTIAL_MONTH_GUARD_ENABLED:
+        coverage = _month_coverage_fraction(port, year, month)
+        if coverage < MONTH_COVERAGE_MIN_FRACTION:
+            # The monthly_demand_estimates schema has no `is_partial` column
+            # (owned by db.py, outside this change set). To avoid grading a
+            # ramp month as complete, we SKIP the snapshot entirely and log it.
+            # The integrator can add an is_partial column + downstream label
+            # later; for now skipping is the safe, non-destructive choice.
+            from loguru import logger
+            logger.warning(
+                f"{port} {year}-{month:02d}: AIS coverage only "
+                f"{coverage:.0%} of the month (< "
+                f"{MONTH_COVERAGE_MIN_FRACTION:.0%}) — skipping snapshot rather "
+                f"than grading a partial month as complete."
+            )
+            return False
+
+    # NOTE: the previous `estimated_mt / days_in_month * days_in_month` was a
+    # no-op (it divided then multiplied by the same number). A completed month's
+    # total is simply the sum of its closed events; we do NOT extrapolate.
+    projected = estimated_mt
+    seasonal  = seasonal_avg_monthly_volume(month, port)
+    pct       = round((projected / seasonal - 1) * 100, 1) if seasonal and seasonal > 0 else None
 
     db.execute("""
         INSERT INTO monthly_demand_estimates

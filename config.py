@@ -33,8 +33,65 @@ PROX_RADIUS_M        = 200    # metres — alongside threshold
 DETECT_POLL_SECS     = 60     # how often event_detector runs
 AIS_KEEP_HOURS       = 48     # hours of raw positions to retain in DB
 
-# Bunkering pump-rate prior (mt/min) used before enough event data to calibrate
+# Bunkering pump-rate PRIOR (mt/min).
+#
+# IMPORTANT: this is a *documented prior*, NOT a physical measurement and NOT a
+# fitted calibration. Every event's tonnage is currently estimated as
+# `duration_min * DEFAULT_PUMP_RATE_MT_MIN`. A real calibration factor can only
+# be fit once we have several COMPLETE months whose official totals are
+# published (see PUMP_RATE_CALIBRATION_ENABLED below). Until then we fall back
+# to this prior and label the output a "calibrated proxy", not a measurement.
 DEFAULT_PUMP_RATE_MT_MIN = 3.5
+
+# ── Methodology flags ───────────────────────────────────────────────────────────
+# CRITICAL: every flag below DEFAULTS TO CURRENT (legacy) BEHAVIOUR so that
+# merely deploying this code does NOT move the live May number. Flip a flag
+# (and only then) to opt into the improved methodology.
+
+# Event-quality filtering: when True, events shorter than MIN_BUNKER_EVENT_MIN
+# are EXCLUDED from VOLUME aggregation (they are still detected/logged/counted
+# separately). Real Singapore bunkering runs ~3-12h; sub-30-min "events" are
+# almost entirely AIS noise / brief drifts and are ~89% of events but only ~2%
+# of modelled volume. Default False = legacy behaviour (count everything).
+EVENT_QUALITY_FILTER_ENABLED = False
+
+# Minimum plausible bunkering duration (minutes) for an event to contribute to
+# VOLUME aggregation when EVENT_QUALITY_FILTER_ENABLED is True.
+MIN_BUNKER_EVENT_MIN = 30
+
+# Collapse obvious re-openings / double-counts of the SAME bunker<->recipient
+# pair whose gap (next.start - prev.end) is below DEDUP_GAP_MIN minutes into a
+# single logical event for volume aggregation. Only active when the quality
+# filter is enabled. Default value chosen conservatively; flag still gated by
+# EVENT_QUALITY_FILTER_ENABLED.
+DEDUP_GAP_MIN = 60
+
+# Per-port pump-rate calibration. When True AND a port has enough COMPLETE
+# months with published official totals, fit a shrinkage-regularised factor
+# (detected_aggregate / official, shrunk toward 1.0). When False (default) or
+# when insufficient complete months exist, fall back to the DEFAULT prior.
+# As of 2026-05 we have only Apr+May 2026 of AIS history and only April has a
+# published official number, and April's AIS coverage is partial — so NO fit is
+# yet possible. This flag is the mechanism for later, not a live calibration.
+PUMP_RATE_CALIBRATION_ENABLED = False
+
+# Minimum number of COMPLETE, officially-published months required before a
+# calibration factor is fit. Below this we use the documented prior.
+PUMP_RATE_MIN_CALIB_MONTHS = 3
+
+# Shrinkage weight toward 1.0 for the calibration ratio (0 = trust raw ratio,
+# 1 = ignore data and keep prior). Regularises a noisy small-sample fit.
+PUMP_RATE_CALIB_SHRINKAGE = 0.5
+
+# Partial-month guard: a month whose detected AIS event coverage clearly does
+# not span the full calendar month is flagged `partial` / skipped rather than
+# graded as a complete month. Default False = legacy (grade as complete).
+PARTIAL_MONTH_GUARD_ENABLED = False
+
+# A month is considered fully covered only if detected events span at least this
+# fraction of the calendar month (first event near day 1, last event near
+# month-end). Used only when PARTIAL_MONTH_GUARD_ENABLED is True.
+MONTH_COVERAGE_MIN_FRACTION = 0.9
 
 # MPA URLs
 MPA_BUNKER_STATS_URL    = "https://www.mpa.gov.sg/maritime-singapore/what-we-do/develop-singapore-as-an-international-maritime-centre/port-statistics/bunkering"
