@@ -1,0 +1,838 @@
+{% extends "base.html" %}
+{% block title %}Vessels — BunkerVision{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h5 class="mb-0 fw-semibold">Vessel Registry</h5>
+    <div class="subtitle">{{ vessels|length }} registered bunker vessels across all ports</div>
+  </div>
+  <button id="refresh-btn" class="btn btn-sm btn-outline-secondary">Refresh SG Registry</button>
+</div>
+
+<ul class="nav nav-pills mb-3" id="vessel-tabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="tab-registry-btn" data-bs-toggle="pill"
+            data-bs-target="#tab-registry" type="button" role="tab">Registry</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="tab-discover-btn" data-bs-toggle="pill"
+            data-bs-target="#tab-discover" type="button" role="tab">AIS Discover</button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="tab-equasis-btn" data-bs-toggle="pill"
+            data-bs-target="#tab-equasis" type="button" role="tab">Equasis Scan</button>
+  </li>
+</ul>
+
+<div class="tab-content">
+
+  {# ── REGISTRY TAB ──────────────────────────────────────────────────────── #}
+  <div class="tab-pane fade show active" id="tab-registry" role="tabpanel">
+    <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
+      <input id="reg-search" class="form-control form-control-sm"
+             placeholder="Search by name…"
+             style="width:200px;background:#0d1117;color:#e6edf3;border-color:#30363d;">
+      <div class="btn-group btn-group-sm" role="group">
+        <button class="btn btn-outline-secondary active port-filter-btn" data-port="">
+          All Ports <span class="badge bg-secondary ms-1">{{ vessels|length }}</span>
+        </button>
+        {% for key, cfg in ports.items() %}
+        {% if port_counts.get(key, 0) > 0 %}
+        <button class="btn btn-outline-secondary port-filter-btn" data-port="{{ key }}">
+          {{ cfg.name }} <span class="badge bg-secondary ms-1">{{ port_counts[key] }}</span>
+        </button>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body p-0">
+        <table class="table table-dark table-hover mb-0" style="width:100%">
+          <thead>
+            <tr>
+              <th>Vessel Name</th>
+              <th>Port</th>
+              <th>MMSI</th>
+              <th>Capacity (mt)</th>
+              <th>Events</th>
+              <th>Added</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="registry-tbody">
+            {% for v in vessels %}
+            <tr data-port="{{ v.port }}" data-name="{{ (v.name or '')|lower }}">
+              <td class="fw-medium">{{ v.name or '—' }}</td>
+              <td>
+                <span class="badge" style="background:#1a2f4a;color:#7eb3ff;font-size:0.7rem;">
+                  {{ ports[v.port].name if v.port in ports else v.port }}
+                </span>
+              </td>
+              <td class="text-muted" style="font-size:0.8rem;font-family:monospace;">{{ v.mmsi or '—' }}</td>
+              <td>{% if v.capacity_mt %}{{ '{:,.0f}'.format(v.capacity_mt) }}{% else %}—{% endif %}</td>
+              <td>
+                {% if v.event_count > 0 %}
+                <span style="color:#58a6ff;">{{ v.event_count }}</span>
+                {% else %}0{% endif %}
+              </td>
+              <td class="text-muted" style="font-size:0.78rem;">{{ v.last_updated or '—' }}</td>
+              <td class="text-end">
+                <button class="btn btn-sm remove-btn py-0 px-2"
+                        data-imo="{{ v.imo }}" data-name="{{ v.name or v.imo }}"
+                        style="font-size:0.7rem;color:#f85149;border:1px solid #3d1a1a;background:transparent;">✕</button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div id="reg-no-results" class="text-center text-muted py-4" style="display:none;">No vessels match</div>
+  </div>
+
+  {# ── EQUASIS SEARCH TAB ─────────────────────────────────────────────────── #}
+  <div class="tab-pane fade" id="tab-equasis" role="tabpanel">
+    <div class="mb-3 px-3 py-2 rounded" style="background:#0d1f2d;border:1px solid #1e3a52;color:#8b9db3;font-size:0.82rem;">
+      Finds tankers (AIS type 80–89) seen in the port area, verifies each against Equasis (official IMO/Lloyd's registry),
+      and auto-adds vessels officially classified as <em>Bunkering Tanker</em>. Up to 30 vessels, ~3s each.
+    </div>
+
+    {# ── Primary: AIS tanker scan ────────────────────────────────────────── #}
+    <div class="d-flex align-items-end gap-3 mb-3 flex-wrap">
+      <div>
+        <label class="text-muted mb-1" style="font-size:0.8rem;display:block;">Port</label>
+        <select id="eq-scan-port" class="form-select form-select-sm"
+                style="width:180px;background:#0d1117;color:#e6edf3;border-color:#30363d;">
+          {% for key, cfg in ports.items() %}
+          <option value="{{ key }}" {% if key == current_port %}selected{% endif %}>{{ cfg.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="text-muted mb-1" style="font-size:0.8rem;display:block;">Lookback</label>
+        <select id="eq-scan-days" class="form-select form-select-sm"
+                style="width:120px;background:#0d1117;color:#e6edf3;border-color:#30363d;">
+          <option value="7" selected>7 days</option>
+          <option value="14">14 days</option>
+          <option value="30">30 days</option>
+        </select>
+      </div>
+      <button id="eq-scan-btn" class="btn btn-sm btn-primary" style="padding:0.3rem 1rem;">
+        Scan AIS Tankers
+      </button>
+      <span id="eq-scan-status" class="text-muted" style="font-size:0.85rem;"></span>
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-body p-0">
+        <table class="table table-dark table-hover mb-0" style="width:100%">
+          <thead>
+            <tr>
+              <th>Vessel Name</th>
+              <th>IMO</th>
+              <th>MMSI</th>
+              <th>Equasis Type</th>
+              <th>Flag</th>
+              <th>GT</th>
+              <th>SOG</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="eq-scan-body">
+            <tr>
+              <td colspan="8" class="text-center text-muted py-4">
+                Select a port and click <strong>Scan AIS Tankers</strong>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {# ── Operator fleet scan ─────────────────────────────────────────────── #}
+    <div class="mb-2 mt-3">
+      <button class="btn btn-link btn-sm text-muted p-0" type="button"
+              data-bs-toggle="collapse" data-bs-target="#eq-operators-panel">
+        ▸ Operator fleet scan (auto-assign by AIS sightings)
+      </button>
+    </div>
+    <div class="collapse" id="eq-operators-panel">
+      <div class="d-flex gap-2 mb-3 flex-wrap align-items-end">
+        <div class="flex-grow-1" style="max-width:300px;">
+          <div class="input-group input-group-sm">
+            <input id="op-new-name" class="form-control" placeholder="Add operator…"
+                   style="background:#0d1117;color:#e6edf3;border-color:#30363d;">
+            <button class="btn btn-outline-secondary" id="op-add-btn">Add</button>
+          </div>
+        </div>
+        <button id="op-scan-btn" class="btn btn-sm btn-primary">Scan All Operators</button>
+        <span id="op-status" class="text-muted" style="font-size:0.85rem;"></span>
+      </div>
+
+      <div id="op-list" class="mb-3 d-flex flex-wrap gap-2"></div>
+
+      <div id="op-results-wrap" style="display:none;">
+        <div class="card">
+          <div class="card-body p-0">
+            <table class="table table-dark table-hover mb-0" style="width:100%">
+              <thead>
+                <tr>
+                  <th>Operator</th><th>Vessel</th><th>IMO</th>
+                  <th>Equasis Type</th><th>Ports assigned</th><th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="op-results-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# ── Secondary: manual name search ───────────────────────────────────── #}
+    <div class="mb-2 mt-3">
+      <button class="btn btn-link btn-sm text-muted p-0" type="button"
+              data-bs-toggle="collapse" data-bs-target="#eq-name-search-panel">
+        ▸ Manual name search (single vessel or fleet)
+      </button>
+    </div>
+    <div class="collapse" id="eq-name-search-panel">
+      <div class="d-flex align-items-end gap-3 mb-3 flex-wrap">
+        <div>
+          <label class="text-muted mb-1" style="font-size:0.8rem;display:block;">Search term</label>
+          <input id="eq-search-term" class="form-control form-control-sm"
+                 placeholder="e.g. veder, koole, apex…"
+                 style="width:240px;background:#0d1117;color:#e6edf3;border-color:#30363d;">
+        </div>
+        <div>
+          <label class="text-muted mb-1" style="font-size:0.8rem;display:block;">Add to port</label>
+          <select id="eq-add-port" class="form-select form-select-sm"
+                  style="width:180px;background:#0d1117;color:#e6edf3;border-color:#30363d;">
+            {% for key, cfg in ports.items() %}
+            <option value="{{ key }}" {% if key == current_port %}selected{% endif %}>{{ cfg.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="d-flex align-items-center gap-2 pb-1">
+          <input type="checkbox" id="eq-filter-bunker" class="form-check-input" checked>
+          <label for="eq-filter-bunker" class="text-muted" style="font-size:0.82rem;">Bunkering Tanker only</label>
+        </div>
+        <button id="eq-search-btn" class="btn btn-sm btn-outline-secondary">Search Equasis</button>
+        <span id="eq-status" class="text-muted" style="font-size:0.85rem;"></span>
+      </div>
+      <div class="card">
+        <div class="card-body p-0">
+          <table class="table table-dark table-hover mb-0" style="width:100%">
+            <thead>
+              <tr>
+                <th>Vessel Name</th><th>IMO</th><th>Equasis Type</th>
+                <th>Flag</th><th>GT</th><th>Year</th><th>In AIS</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="eq-results-body">
+              <tr><td colspan="8" class="text-center text-muted py-4">Enter a term above</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── DISCOVER TAB ──────────────────────────────────────────────────────── #}
+  <div class="tab-pane fade" id="tab-discover" role="tabpanel">
+    <div class="d-flex align-items-end gap-3 mb-3 flex-wrap">
+      <div>
+        <label class="text-muted mb-1" style="font-size:0.8rem;display:block;">Port</label>
+        <select id="discover-port" class="form-select form-select-sm"
+                style="width:200px;background:#0d1117;color:#e6edf3;border-color:#30363d;">
+          {% for key, cfg in ports.items() %}
+          <option value="{{ key }}" {% if key == current_port %}selected{% endif %}>{{ cfg.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button id="discover-btn" class="btn btn-sm btn-outline-primary">Find Candidates</button>
+      <button id="verify-btn" class="btn btn-sm btn-outline-secondary" disabled>Verify on VesselFinder</button>
+      <span id="discover-status" class="text-muted" style="font-size:0.85rem;"></span>
+    </div>
+
+    <div class="mb-3 px-3 py-2 rounded" style="background:#0d1f2d;border:1px solid #1e3a52;color:#8b9db3;font-size:0.82rem;">
+      Shows vessels currently in this port's AIS coverage, classified as tanker type (AIS codes 80–89) or with small draught.
+      Click a vessel name to verify on VesselFinder before adding to the registry.
+      Once added, AIS positions for that vessel start being logged immediately and event detection kicks in automatically.
+    </div>
+
+    <div class="card">
+      <div class="card-body p-0">
+        <table class="table table-dark table-hover mb-0" style="width:100%">
+          <thead>
+            <tr>
+              <th>Vessel Name</th>
+              <th>MMSI</th>
+              <th>IMO</th>
+              <th>AIS Class</th>
+              <th>VesselFinder Type</th>
+              <th>Draught (m)</th>
+              <th>SOG (kt)</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="candidates-body">
+            <tr>
+              <td colspan="8" class="text-center text-muted py-4">
+                Select a port and click <strong>Find Candidates</strong>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Registry: search + port filter ────────────────────────────────────────────
+let regPortFilter = '';
+
+function filterRegistry() {
+  const search = document.getElementById('reg-search').value.toLowerCase().trim();
+  let visible = 0;
+  document.querySelectorAll('#registry-tbody tr').forEach(row => {
+    const portOk = !regPortFilter || row.dataset.port === regPortFilter;
+    const nameOk = !search     || row.dataset.name.includes(search);
+    const show = portOk && nameOk;
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  document.getElementById('reg-no-results').style.display = visible ? 'none' : 'block';
+}
+
+document.getElementById('reg-search').addEventListener('input', filterRegistry);
+
+document.querySelectorAll('.port-filter-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.port-filter-btn').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+    regPortFilter = this.dataset.port;
+    filterRegistry();
+  });
+});
+
+// ── Registry: remove vessel ───────────────────────────────────────────────────
+document.querySelectorAll('.remove-btn').forEach(btn => {
+  btn.addEventListener('click', async function() {
+    const imo  = this.dataset.imo;
+    const name = this.dataset.name;
+    if (!confirm(`Remove "${name}" from the registry?`)) return;
+    const row = this.closest('tr');
+    this.disabled = true;
+    try {
+      const res = await fetch('/api/registry/remove', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({imo}),
+      }).then(r => r.json());
+      if (res.error) { alert(res.error); this.disabled = false; return; }
+      row.remove();
+    } catch(e) {
+      alert('Failed to remove vessel');
+      this.disabled = false;
+    }
+  });
+});
+
+// ── Registry: refresh Singapore registry ─────────────────────────────────────
+document.getElementById('refresh-btn').addEventListener('click', async function() {
+  this.disabled = true;
+  this.textContent = 'Refreshing…';
+  try {
+    const res = await fetch('/api/refresh_registry', {method:'POST'}).then(r => r.json());
+    alert(`Registry refreshed — ${res.upserted} vessels upserted`);
+    location.reload();
+  } catch(e) {
+    alert('Refresh failed');
+  } finally {
+    this.disabled = false;
+    this.textContent = 'Refresh SG Registry';
+  }
+});
+
+// ── Discover: find candidates ─────────────────────────────────────────────────
+let _loadedCandidates = [];
+
+function aisBadge(confidence, type_code) {
+  if (confidence === 'high')   return `<span class="badge" style="background:#1a3a1a;color:#56d364;">Tanker · AIS ${type_code}</span>`;
+  if (confidence === 'medium') return `<span class="badge" style="background:#2d2000;color:#e3b341;">Small draught</span>`;
+  return `<span class="badge" style="background:#21262d;color:#8b949e;">Unknown</span>`;
+}
+
+function vfBadge(info) {
+  if (!info) return `<span class="vf-cell text-muted" style="font-size:0.78rem;">—</span>`;
+  const styles = {
+    confirmed:  'background:#1a3a1a;color:#56d364;',
+    likely:     'background:#1e3320;color:#3fb950;',
+    possible:   'background:#2d2000;color:#e3b341;',
+    cargo:      'background:#21262d;color:#8b949e;',
+    not_tanker: 'background:#3d1a1a;color:#f85149;',
+    unknown:    'background:#21262d;color:#6e7681;',
+  };
+  const s = styles[info.level] || styles.unknown;
+  return `<span class="vf-cell badge" style="${s}" title="${info.type}">${info.label}</span>`;
+}
+
+document.getElementById('discover-btn').addEventListener('click', loadCandidates);
+document.getElementById('verify-btn').addEventListener('click', runVfVerify);
+
+async function loadCandidates() {
+  const port    = document.getElementById('discover-port').value;
+  const status  = document.getElementById('discover-status');
+  const tbody   = document.getElementById('candidates-body');
+  const discBtn = document.getElementById('discover-btn');
+  const verBtn  = document.getElementById('verify-btn');
+
+  discBtn.disabled = true;
+  discBtn.textContent = 'Scanning…';
+  verBtn.disabled = true;
+  status.textContent = '';
+  tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Scanning AIS feed…</td></tr>';
+  _loadedCandidates = [];
+
+  try {
+    const candidates = await fetch(`/api/registry/candidates?port=${port}`).then(r => r.json());
+    _loadedCandidates = candidates;
+    discBtn.disabled = false;
+    discBtn.textContent = 'Find Candidates';
+    verBtn.disabled = !candidates.length;
+    status.textContent = `${candidates.length} candidate${candidates.length !== 1 ? 's' : ''} found`;
+
+    if (!candidates.length) {
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">
+        No tanker-type vessels currently visible in this port's AIS feed
+      </td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = candidates.map(c => {
+      const safeName    = (c.name || '—').replace(/[<>"]/g, '');
+      const nameCell    = c.mmsi
+        ? `<a href="https://www.vesselfinder.com/vessels/details/${c.mmsi}" target="_blank"
+              style="color:#e6edf3;text-decoration:none;" title="Open on VesselFinder"
+              >${safeName} <span style="color:#58a6ff;font-size:0.75em;">↗</span></a>`
+        : safeName;
+      const draught     = c.draught != null ? parseFloat(c.draught).toFixed(1) : '—';
+      const sog         = c.sog     != null ? parseFloat(c.sog).toFixed(1)     : '—';
+      const safeNameAttr = (c.name || '').replace(/"/g, '&quot;');
+      return `<tr data-mmsi="${c.mmsi || ''}">
+        <td class="fw-medium">${nameCell}</td>
+        <td class="text-muted" style="font-size:0.8rem;font-family:monospace;">${c.mmsi || '—'}</td>
+        <td class="text-muted" style="font-size:0.8rem;font-family:monospace;">${c.imo  || '—'}</td>
+        <td>${aisBadge(c.confidence, c.type_code)}</td>
+        <td class="vf-type-cell">—</td>
+        <td>${draught}</td>
+        <td>${sog}</td>
+        <td class="text-end">
+          <button class="btn btn-sm add-candidate py-0 px-2"
+                  data-mmsi="${c.mmsi || ''}" data-imo="${c.imo || ''}"
+                  data-name="${safeNameAttr}" data-port="${port}"
+                  style="font-size:0.75rem;color:#3fb950;border:1px solid #1f3d1f;background:transparent;">
+            + Add
+          </button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    bindAddButtons();
+
+  } catch(e) {
+    discBtn.disabled = false;
+    discBtn.textContent = 'Find Candidates';
+    status.textContent = 'Error loading candidates';
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Failed to load candidates</td></tr>';
+  }
+}
+
+async function runVfVerify() {
+  const verBtn = document.getElementById('verify-btn');
+  const status = document.getElementById('discover-status');
+  if (!_loadedCandidates.length) return;
+
+  verBtn.disabled = true;
+  verBtn.textContent = 'Verifying…';
+
+  const mmsis = _loadedCandidates.map(c => c.mmsi).filter(Boolean);
+  // Process in chunks of 30 so the table updates progressively
+  const chunkSize = 30;
+  let done = 0;
+
+  for (let i = 0; i < mmsis.length; i += chunkSize) {
+    const chunk = mmsis.slice(i, i + chunkSize);
+    status.textContent = `VesselFinder: checking ${i + 1}–${Math.min(i + chunkSize, mmsis.length)} of ${mmsis.length}…`;
+
+    try {
+      const results = await fetch('/api/registry/vf_check', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({mmsis: chunk}),
+      }).then(r => r.json());
+
+      // Update each row
+      for (const [mmsi, info] of Object.entries(results)) {
+        const row = document.querySelector(`tr[data-mmsi="${mmsi}"]`);
+        if (row) {
+          const cell = row.querySelector('.vf-type-cell');
+          if (cell) cell.innerHTML = vfBadge(info);
+
+          // Dim rows that are clearly not bunker vessels
+          if (info.level === 'not_tanker') row.style.opacity = '0.4';
+          // Highlight confirmed/likely bunker rows
+          if (info.level === 'confirmed' || info.level === 'likely') {
+            row.style.background = 'rgba(26,58,26,0.3)';
+          }
+        }
+        done++;
+      }
+    } catch(e) {
+      // Continue with next chunk even if one fails
+    }
+  }
+
+  status.textContent = `VesselFinder check complete — ${done} vessels verified`;
+  verBtn.disabled = false;
+  verBtn.textContent = 'Re-verify';
+}
+
+function bindAddButtons() {
+  document.querySelectorAll('.add-candidate').forEach(addBtn => {
+    addBtn.addEventListener('click', async function() {
+      const {mmsi, imo, name, port} = this.dataset;
+      this.disabled = true;
+      this.textContent = '…';
+      try {
+        const res = await fetch('/api/registry/add', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({mmsi, imo, name, port}),
+        }).then(r => r.json());
+        if (res.error) {
+          alert(res.error);
+          this.disabled = false;
+          this.textContent = '+ Add';
+          return;
+        }
+        this.textContent = '✓ Added';
+        this.style.color = '#56d364';
+        this.style.borderColor = '#1a3a1a';
+      } catch(e) {
+        alert('Failed to add vessel');
+        this.disabled = false;
+        this.textContent = '+ Add';
+      }
+    });
+  });
+}
+
+// ── Equasis ───────────────────────────────────────────────────────────────────
+function eqTypeBadge(ship_type) {
+  const st = (ship_type || '').toLowerCase();
+  if (st.includes('bunker'))
+    return `<span class="badge" style="background:#1a3a1a;color:#56d364;">${ship_type}</span>`;
+  if (st.includes('oil products') || st === 'oil tanker')
+    return `<span class="badge" style="background:#2d2000;color:#e3b341;">${ship_type}</span>`;
+  if (st.includes('tanker'))
+    return `<span class="badge" style="background:#21262d;color:#8b9db3;">${ship_type}</span>`;
+  if (!ship_type)
+    return `<span class="text-muted">—</span>`;
+  return `<span class="badge" style="background:#21262d;color:#6e7681;">${ship_type}</span>`;
+}
+
+async function eqAddVessel(imo, name, port, btn) {
+  btn.disabled = true;
+  btn.textContent = '…';
+  try {
+    const res = await fetch('/api/registry/add', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({imo, name, port}),
+    }).then(r => r.json());
+    if (res.error) { alert(res.error); btn.disabled = false; btn.textContent = '+ Add'; return; }
+    btn.textContent = '✓ Added';
+    btn.style.color = '#56d364';
+    btn.style.borderColor = '#1a3a1a';
+    btn.disabled = true;
+  } catch(e) {
+    alert('Failed to add vessel');
+    btn.disabled = false;
+    btn.textContent = '+ Add';
+  }
+}
+
+// ── AIS Tanker Scan ───────────────────────────────────────────────────────────
+document.getElementById('eq-scan-btn').addEventListener('click', runEqScan);
+
+async function runEqScan() {
+  const port   = document.getElementById('eq-scan-port').value;
+  const days   = document.getElementById('eq-scan-days').value;
+  const status = document.getElementById('eq-scan-status');
+  const tbody  = document.getElementById('eq-scan-body');
+  const btn    = document.getElementById('eq-scan-btn');
+
+  btn.disabled = true;
+  btn.textContent = 'Scanning…';
+  status.textContent = 'Querying AIS + Equasis — may take up to a minute…';
+  tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Looking up tankers on Equasis…</td></tr>';
+
+  try {
+    const res = await fetch('/api/registry/eq_tanker_scan', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({port, days: parseInt(days)}),
+    }).then(r => r.json());
+
+    if (res.error) {
+      status.textContent = res.error;
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger py-3">${res.error}</td></tr>`;
+      return;
+    }
+
+    const results = res.results || [];
+    const parts = [`${res.scanned} tanker${res.scanned !== 1 ? 's' : ''} scanned`];
+    if (res.auto_added) parts.push(`${res.auto_added} auto-added`);
+    status.textContent = parts.join(' · ');
+
+    if (!results.length) {
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">No ungregistered tankers found in AIS for this port/period</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = results.map(r => {
+      const safeName = (r.name || '—').replace(/[<>"]/g, '');
+      const rowBg = r.auto_added          ? 'rgba(26,58,26,0.35)' :
+                    r.confidence === 'likely'   ? 'rgba(30,51,20,0.2)'  :
+                    r.confidence === 'possible' ? 'rgba(40,40,10,0.2)'  : '';
+      const sogFmt = r.sog != null ? r.sog.toFixed(1) + ' kt' : '—';
+      let action;
+      if (r.auto_added) {
+        action = `<span style="color:#56d364;font-size:0.75rem;">✓ Auto-added</span>`;
+      } else if (r.confidence === 'not_tanker' || r.confidence === 'unknown') {
+        action = `<span class="text-muted" style="font-size:0.75rem;">${r.confidence}</span>`;
+      } else {
+        action = `<button class="btn btn-sm eq-scan-add-btn py-0 px-2"
+                          data-imo="${r.imo}" data-name="${safeName}" data-port="${port}"
+                          style="font-size:0.75rem;color:#3fb950;border:1px solid #1f3d1f;background:transparent;">
+                    + Add
+                  </button>`;
+      }
+      return `<tr style="background:${rowBg}">
+        <td class="fw-medium">${safeName}</td>
+        <td class="text-muted" style="font-size:0.8rem;font-family:monospace;">${r.imo}</td>
+        <td class="text-muted" style="font-size:0.8rem;font-family:monospace;">${r.mmsi}</td>
+        <td>${eqTypeBadge(r.ship_type)}</td>
+        <td class="text-muted" style="font-size:0.82rem;">${r.flag || '—'}</td>
+        <td class="text-muted" style="font-size:0.82rem;">${r.gt ? r.gt.toLocaleString() : '—'}</td>
+        <td class="text-muted" style="font-size:0.82rem;">${sogFmt}</td>
+        <td class="text-end">${action}</td>
+      </tr>`;
+    }).join('');
+
+    document.querySelectorAll('.eq-scan-add-btn').forEach(b => {
+      b.addEventListener('click', function() {
+        eqAddVessel(this.dataset.imo, this.dataset.name, this.dataset.port, this);
+      });
+    });
+
+  } catch(e) {
+    status.textContent = 'Scan failed';
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger py-3">Error during scan</td></tr>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Scan AIS Tankers';
+  }
+}
+
+// ── Name search (secondary) ───────────────────────────────────────────────────
+document.getElementById('eq-search-btn').addEventListener('click', runEqSearch);
+document.getElementById('eq-search-term').addEventListener('keydown', e => {
+  if (e.key === 'Enter') runEqSearch();
+});
+
+async function runEqSearch() {
+  const term   = document.getElementById('eq-search-term').value.trim();
+  const port   = document.getElementById('eq-add-port').value;
+  const filter = document.getElementById('eq-filter-bunker').checked ? 'bunkering' : '';
+  const status = document.getElementById('eq-status');
+  const tbody  = document.getElementById('eq-results-body');
+  const btn    = document.getElementById('eq-search-btn');
+
+  if (term.length < 3) { status.textContent = 'Enter at least 3 characters'; return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Searching…';
+  status.textContent = '';
+  tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Querying Equasis…</td></tr>';
+
+  try {
+    const params = new URLSearchParams({q: term});
+    if (filter) params.set('filter', filter);
+    const results = await fetch(`/api/registry/eq_search?${params}`).then(r => r.json());
+
+    if (results.error) {
+      status.textContent = results.error;
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-3">${results.error}</td></tr>`;
+      return;
+    }
+
+    status.textContent = `${results.length} result${results.length !== 1 ? 's' : ''}`;
+
+    if (!results.length) {
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">No vessels found for "${term}"</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = results.map(r => {
+      const safeName = (r.name || '—').replace(/[<>"]/g, '');
+      const inAis = r.in_ais
+        ? `<span style="color:#3fb950;font-size:0.78rem;">● Live</span>`
+        : `<span class="text-muted" style="font-size:0.78rem;">—</span>`;
+      const rowBg = r.confidence === 'confirmed' ? 'rgba(26,58,26,0.25)' :
+                    r.confidence === 'likely'    ? 'rgba(30,51,20,0.2)'  : '';
+      const addBtn = r.in_registry
+        ? `<span style="color:#8b949e;font-size:0.75rem;">In registry</span>`
+        : `<button class="btn btn-sm eq-add-btn py-0 px-2"
+                   data-imo="${r.imo}" data-name="${safeName}" data-port="${port}"
+                   style="font-size:0.75rem;color:#3fb950;border:1px solid #1f3d1f;background:transparent;">
+             + Add
+           </button>`;
+      return `<tr style="background:${rowBg}">
+        <td class="fw-medium">${safeName}</td>
+        <td class="text-muted" style="font-size:0.8rem;font-family:monospace;">${r.imo}</td>
+        <td>${eqTypeBadge(r.ship_type)}</td>
+        <td class="text-muted" style="font-size:0.82rem;">${r.flag || '—'}</td>
+        <td class="text-muted" style="font-size:0.82rem;">${r.gt ? r.gt.toLocaleString() : '—'}</td>
+        <td class="text-muted" style="font-size:0.82rem;">${r.year || '—'}</td>
+        <td>${inAis}</td>
+        <td class="text-end">${addBtn}</td>
+      </tr>`;
+    }).join('');
+
+    document.querySelectorAll('.eq-add-btn').forEach(b => {
+      b.addEventListener('click', function() {
+        eqAddVessel(this.dataset.imo, this.dataset.name, document.getElementById('eq-add-port').value, this);
+      });
+    });
+
+  } catch(e) {
+    status.textContent = 'Search failed';
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-3">Error querying Equasis</td></tr>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Search Equasis';
+  }
+}
+
+// ── Operator fleet scan ───────────────────────────────────────────────────────
+
+let _operators = [];
+
+async function loadOperators() {
+  const res  = await fetch('/api/registry/operators');
+  const data = await res.json();
+  _operators = data.operators || [];
+  renderOperatorList();
+}
+
+function renderOperatorList() {
+  const el = document.getElementById('op-list');
+  el.innerHTML = _operators.map((op, i) => `
+    <div class="d-flex align-items-center gap-1 px-2 py-1 rounded"
+         style="background:#161b22;border:1px solid #30363d;font-size:0.82rem;">
+      <span style="color:#e6edf3;">${op}</span>
+      <button class="btn btn-link btn-sm p-0 ms-2 text-danger op-remove-btn"
+              data-idx="${i}" style="font-size:0.75rem;line-height:1;">✕</button>
+    </div>
+  `).join('');
+
+  document.querySelectorAll('.op-remove-btn').forEach(b => {
+    b.addEventListener('click', async function() {
+      _operators.splice(parseInt(this.dataset.idx), 1);
+      await saveOperators();
+      renderOperatorList();
+    });
+  });
+}
+
+async function saveOperators() {
+  await fetch('/api/registry/operators', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({operators: _operators}),
+  });
+}
+
+document.getElementById('op-add-btn').addEventListener('click', async () => {
+  const inp = document.getElementById('op-new-name');
+  const name = inp.value.trim();
+  if (!name || _operators.includes(name)) { inp.value = ''; return; }
+  _operators.push(name);
+  await saveOperators();
+  renderOperatorList();
+  inp.value = '';
+});
+
+document.getElementById('op-scan-btn').addEventListener('click', async () => {
+  if (!_operators.length) { document.getElementById('op-status').textContent = 'No operators in list'; return; }
+
+  const btn    = document.getElementById('op-scan-btn');
+  const status = document.getElementById('op-status');
+  btn.disabled = true;
+  btn.textContent = `Scanning ${_operators.length} operator(s)…`;
+  status.textContent = `~${_operators.length * 10}s`;
+
+  const wrap = document.getElementById('op-results-wrap');
+  const tbody = document.getElementById('op-results-body');
+  wrap.style.display = 'none';
+
+  try {
+    const res  = await fetch('/api/registry/operators/scan', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({terms: _operators}),
+    });
+    const data = await res.json();
+    if (data.error) { status.textContent = data.error; return; }
+
+    status.textContent = `${data.added} vessel(s) added`;
+    if (!data.results.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">No confirmed Bunkering Tankers found</td></tr>';
+    } else {
+      tbody.innerHTML = data.results.map(r => {
+        const badge = r.added
+          ? `<span class="badge bg-success">Added → ${r.ports.join(', ')}</span>`
+          : r.ports && r.ports.length === 0
+            ? `<span class="badge bg-secondary">No AIS sighting</span>`
+            : `<span class="badge bg-secondary">Already registered</span>`;
+        return `<tr>
+          <td>${r.operator}</td>
+          <td>${r.name}</td>
+          <td>${r.imo}</td>
+          <td style="color:#3fb950;">${r.ship_type}</td>
+          <td>${(r.ports||[]).join(', ') || '—'}</td>
+          <td>${badge}</td>
+        </tr>`;
+      }).join('');
+    }
+    wrap.style.display = '';
+    if (data.added) location.reload();
+  } catch(e) {
+    status.textContent = 'Scan failed';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Scan Selected';
+  }
+});
+
+loadOperators();
+</script>
+{% endblock %}

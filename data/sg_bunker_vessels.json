@@ -1,0 +1,882 @@
+[
+  {
+    "name": "ALLI",
+    "dwt": 3331.0
+  },
+  {
+    "name": "AMALTHEA",
+    "dwt": 7999.0
+  },
+  {
+    "name": "AQUA 6",
+    "dwt": 6510.0
+  },
+  {
+    "name": "AQUA-TERRA 7",
+    "dwt": 6500.0
+  },
+  {
+    "name": "ARTEMIS",
+    "dwt": 6500.0
+  },
+  {
+    "name": "ARUNDINA",
+    "dwt": 5540.0
+  },
+  {
+    "name": "AVON",
+    "dwt": 7376.0
+  },
+  {
+    "name": "BAYAN",
+    "dwt": 3869.0
+  },
+  {
+    "name": "BEE 3",
+    "dwt": 239.0
+  },
+  {
+    "name": "BONITA",
+    "dwt": 286.0
+  },
+  {
+    "name": "BOONTEK",
+    "dwt": 5540.0
+  },
+  {
+    "name": "BRASSAVOLA",
+    "dwt": 6651.0
+  },
+  {
+    "name": "BRUE",
+    "dwt": 4276.0
+  },
+  {
+    "name": "CALISTA",
+    "dwt": 283.0
+  },
+  {
+    "name": "CALLISTO",
+    "dwt": 6956.0
+  },
+  {
+    "name": "CHLOE",
+    "dwt": 6508.0
+  },
+  {
+    "name": "CHWNTEK 5",
+    "dwt": 6762.0
+  },
+  {
+    "name": "CLOVER",
+    "dwt": 99.0
+  },
+  {
+    "name": "CNC 5",
+    "dwt": 197.0
+  },
+  {
+    "name": "CNC 7",
+    "dwt": 597.0
+  },
+  {
+    "name": "COMO",
+    "dwt": 3861.0
+  },
+  {
+    "name": "CONGO",
+    "dwt": 4480.0
+  },
+  {
+    "name": "CROWN FORTUNE",
+    "dwt": 2984.0
+  },
+  {
+    "name": "CSM",
+    "dwt": 284.0
+  },
+  {
+    "name": "CSM 1",
+    "dwt": 603.0
+  },
+  {
+    "name": "CSM 2",
+    "dwt": 190.0
+  },
+  {
+    "name": "CSM TAURUS",
+    "dwt": 3718.0
+  },
+  {
+    "name": "CSM VIPER",
+    "dwt": 2230.0
+  },
+  {
+    "name": "CSM WYVERN",
+    "dwt": 2980.0
+  },
+  {
+    "name": "DAVINA",
+    "dwt": 1868.0
+  },
+  {
+    "name": "DEBONAIR",
+    "dwt": 5582.0
+  },
+  {
+    "name": "DECORUM",
+    "dwt": 5574.0
+  },
+  {
+    "name": "DELPHINE",
+    "dwt": 5564.0
+  },
+  {
+    "name": "DEMURE",
+    "dwt": 5542.0
+  },
+  {
+    "name": "DESNA",
+    "dwt": 4459.0
+  },
+  {
+    "name": "DILIGENCE",
+    "dwt": 5021.0
+  },
+  {
+    "name": "DOUBLE HAPPINESS",
+    "dwt": 4999.0
+  },
+  {
+    "name": "DRINA",
+    "dwt": 978.0
+  },
+  {
+    "name": "EAGER",
+    "dwt": 9480.0
+  },
+  {
+    "name": "ELBE",
+    "dwt": 978.0
+  },
+  {
+    "name": "EMISSARY",
+    "dwt": 7997.0
+  },
+  {
+    "name": "EMMA COSULICH",
+    "dwt": 5613.0
+  },
+  {
+    "name": "EM NATASHA",
+    "dwt": 7999.0
+  },
+  {
+    "name": "EM NIKITA",
+    "dwt": 7999.0
+  },
+  {
+    "name": "EM SHARLOTTE",
+    "dwt": 7999.0
+  },
+  {
+    "name": "EM SHONA",
+    "dwt": 7998.0
+  },
+  {
+    "name": "ENLIVEN",
+    "dwt": 1113.0
+  },
+  {
+    "name": "ENERGY LUMINA",
+    "dwt": 7999.0
+  },
+  {
+    "name": "EPITOME",
+    "dwt": 8628.0
+  },
+  {
+    "name": "ESSENCE",
+    "dwt": 8613.0
+  },
+  {
+    "name": "ETERNITY",
+    "dwt": 3732.0
+  },
+  {
+    "name": "FELLOWSHIP",
+    "dwt": 7000.0
+  },
+  {
+    "name": "FERESA",
+    "dwt": 1867.0
+  },
+  {
+    "name": "FLAGSHIP",
+    "dwt": 7000.0
+  },
+  {
+    "name": "FORCE",
+    "dwt": 239.0
+  },
+  {
+    "name": "FRONTEK",
+    "dwt": 2141.0
+  },
+  {
+    "name": "FUELNG BELLINA",
+    "dwt": 5972.0
+  },
+  {
+    "name": "FUELNG VENOSA",
+    "dwt": 12351.0
+  },
+  {
+    "name": "GLORY",
+    "dwt": 599.0
+  },
+  {
+    "name": "GLORIA",
+    "dwt": 7998.0
+  },
+  {
+    "name": "GLOVER",
+    "dwt": 7006.0
+  },
+  {
+    "name": "GOLDEN ANTARES",
+    "dwt": 5997.0
+  },
+  {
+    "name": "GOLDEN ARANDA",
+    "dwt": 1974.0
+  },
+  {
+    "name": "GOLDEN PIONEER",
+    "dwt": 3630.0
+  },
+  {
+    "name": "GOLDEN SIRIUS",
+    "dwt": 7996.0
+  },
+  {
+    "name": "GOODTRANS 1",
+    "dwt": 7992.0
+  },
+  {
+    "name": "GRAZIA COSULICH",
+    "dwt": 4998.0
+  },
+  {
+    "name": "HAI SOON 1",
+    "dwt": 4261.0
+  },
+  {
+    "name": "HAI SOON 2",
+    "dwt": 4243.0
+  },
+  {
+    "name": "HAI SOON 3",
+    "dwt": 4259.0
+  },
+  {
+    "name": "HAI SOON 16",
+    "dwt": 4288.0
+  },
+  {
+    "name": "HAI SOON 32",
+    "dwt": 6542.0
+  },
+  {
+    "name": "HAI SOON 33",
+    "dwt": 4255.0
+  },
+  {
+    "name": "HAI YIN I",
+    "dwt": 902.0
+  },
+  {
+    "name": "HANTEK 3",
+    "dwt": 6775.0
+  },
+  {
+    "name": "HENG SHENG",
+    "dwt": 6695.0
+  },
+  {
+    "name": "HOETEK 19",
+    "dwt": 1977.0
+  },
+  {
+    "name": "HUMBER",
+    "dwt": 4476.0
+  },
+  {
+    "name": "HY AMBER",
+    "dwt": 979.0
+  },
+  {
+    "name": "INDUS",
+    "dwt": 6300.0
+  },
+  {
+    "name": "INFINITY",
+    "dwt": 4223.0
+  },
+  {
+    "name": "ISANDA",
+    "dwt": 8679.0
+  },
+  {
+    "name": "ISSELIA",
+    "dwt": 8679.0
+  },
+  {
+    "name": "JASMINE",
+    "dwt": 163.0
+  },
+  {
+    "name": "JUMA",
+    "dwt": 4211.0
+  },
+  {
+    "name": "KAI EI MARU 15",
+    "dwt": 6863.0
+  },
+  {
+    "name": "KAI EI MARU 8",
+    "dwt": 6857.0
+  },
+  {
+    "name": "KANTEK 2",
+    "dwt": 6200.0
+  },
+  {
+    "name": "KARA",
+    "dwt": 4076.0
+  },
+  {
+    "name": "KHATIM",
+    "dwt": 3331.0
+  },
+  {
+    "name": "KIMTEK 1",
+    "dwt": 6200.0
+  },
+  {
+    "name": "KOSMOS CITRINE",
+    "dwt": 6941.0
+  },
+  {
+    "name": "KOSMOS LILY",
+    "dwt": 639.0
+  },
+  {
+    "name": "LAUREL",
+    "dwt": 8356.0
+  },
+  {
+    "name": "LIBERTY 29",
+    "dwt": 1787.0
+  },
+  {
+    "name": "LIBERTY 88",
+    "dwt": 503.0
+  },
+  {
+    "name": "LIBRA",
+    "dwt": 2798.0
+  },
+  {
+    "name": "LUISELLA COSULICH",
+    "dwt": 3970.0
+  },
+  {
+    "name": "LUMINOUS",
+    "dwt": 2814.0
+  },
+  {
+    "name": "MAESTRO",
+    "dwt": 8500.0
+  },
+  {
+    "name": "MAJESTY",
+    "dwt": 8623.0
+  },
+  {
+    "name": "MAJULAH SIRIUS",
+    "dwt": 778.0
+  },
+  {
+    "name": "MAPLE",
+    "dwt": 4097.0
+  },
+  {
+    "name": "MARINE AZURE",
+    "dwt": 7990.0
+  },
+  {
+    "name": "MARINE BLUE",
+    "dwt": 7990.0
+  },
+  {
+    "name": "MARINE DYNAMO",
+    "dwt": 8270.0
+  },
+  {
+    "name": "MARINE FUTURE",
+    "dwt": 7990.0
+  },
+  {
+    "name": "MARINE GAIA",
+    "dwt": 7014.0
+  },
+  {
+    "name": "MARINE GINZA",
+    "dwt": 7990.0
+  },
+  {
+    "name": "MARINE JEWEL",
+    "dwt": 8649.0
+  },
+  {
+    "name": "MARINE ORACLE",
+    "dwt": 4708.0
+  },
+  {
+    "name": "MARINE PAMELA",
+    "dwt": 4993.0
+  },
+  {
+    "name": "MARINE PARADE",
+    "dwt": 7999.0
+  },
+  {
+    "name": "MARINE QUEENIE",
+    "dwt": 6517.0
+  },
+  {
+    "name": "MARINE ROSE",
+    "dwt": 6495.0
+  },
+  {
+    "name": "MARINE SELENA",
+    "dwt": 6534.0
+  },
+  {
+    "name": "MARINE TINA",
+    "dwt": 6538.0
+  },
+  {
+    "name": "MARINE VICKY",
+    "dwt": 8138.0
+  },
+  {
+    "name": "MARINE YANGTZE",
+    "dwt": 6685.0
+  },
+  {
+    "name": "MARINE ZAMBEZI",
+    "dwt": 6648.0
+  },
+  {
+    "name": "MARLIN DUA",
+    "dwt": 4594.0
+  },
+  {
+    "name": "MARLIN SATU",
+    "dwt": 4622.0
+  },
+  {
+    "name": "MARLIN TIGA",
+    "dwt": 4565.0
+  },
+  {
+    "name": "MARMORIS",
+    "dwt": 1999.0
+  },
+  {
+    "name": "MARTA COSULICH",
+    "dwt": 7990.0
+  },
+  {
+    "name": "MERLION 8",
+    "dwt": 5101.0
+  },
+  {
+    "name": "MERLION 20",
+    "dwt": 1974.0
+  },
+  {
+    "name": "MERLION 21",
+    "dwt": 1991.0
+  },
+  {
+    "name": "MERLION 23",
+    "dwt": 1993.0
+  },
+  {
+    "name": "MERLION 25",
+    "dwt": 2131.0
+  },
+  {
+    "name": "MERLION 27",
+    "dwt": 2151.0
+  },
+  {
+    "name": "MERLION 28",
+    "dwt": 2151.0
+  },
+  {
+    "name": "MERLION 30",
+    "dwt": 473.0
+  },
+  {
+    "name": "MERLION 31",
+    "dwt": 500.0
+  },
+  {
+    "name": "MULAN",
+    "dwt": 200.0
+  },
+  {
+    "name": "NEPAMORA",
+    "dwt": 5600.0
+  },
+  {
+    "name": "NEW NAVIGATOR 2",
+    "dwt": 4711.0
+  },
+  {
+    "name": "NEW NAVIGATOR 3",
+    "dwt": 4711.0
+  },
+  {
+    "name": "ODETTE EXCELLENCE",
+    "dwt": 2980.0
+  },
+  {
+    "name": "ODETTE OASIS",
+    "dwt": 6700.0
+  },
+  {
+    "name": "OIGAWA",
+    "dwt": 7340.0
+  },
+  {
+    "name": "ORACLE",
+    "dwt": 9338.0
+  },
+  {
+    "name": "ORCHID",
+    "dwt": 163.0
+  },
+  {
+    "name": "PACIFIC FAITH",
+    "dwt": 6942.0
+  },
+  {
+    "name": "PACIFIC HONOUR",
+    "dwt": 4785.0
+  },
+  {
+    "name": "PACIFIC PRIDE",
+    "dwt": 598.0
+  },
+  {
+    "name": "PACIFIC SINCERE",
+    "dwt": 4301.0
+  },
+  {
+    "name": "PACIFIC SPIRIT",
+    "dwt": 6942.0
+  },
+  {
+    "name": "PALMSTONE",
+    "dwt": 260.0
+  },
+  {
+    "name": "PARMELIA I",
+    "dwt": 1639.0
+  },
+  {
+    "name": "PEARL LAVENDER",
+    "dwt": 6786.0
+  },
+  {
+    "name": "PEARL LAUREL",
+    "dwt": 6790.0
+  },
+  {
+    "name": "PEARL LEGACY",
+    "dwt": 6795.0
+  },
+  {
+    "name": "PEARL LEGEND",
+    "dwt": 6788.0
+  },
+  {
+    "name": "PEARL LILY",
+    "dwt": 6779.0
+  },
+  {
+    "name": "PEARL LEGO",
+    "dwt": 6813.0
+  },
+  {
+    "name": "PEARL MELODY",
+    "dwt": 7996.0
+  },
+  {
+    "name": "PEONY",
+    "dwt": 200.0
+  },
+  {
+    "name": "PERL",
+    "dwt": 7439.0
+  },
+  {
+    "name": "PETRO ASIA",
+    "dwt": 4791.0
+  },
+  {
+    "name": "PUFFIN THREE",
+    "dwt": 5646.0
+  },
+  {
+    "name": "RADIANCE",
+    "dwt": 2814.0
+  },
+  {
+    "name": "ROIELLA",
+    "dwt": 4988.0
+  },
+  {
+    "name": "ROSE",
+    "dwt": 99.0
+  },
+  {
+    "name": "RUTH",
+    "dwt": 4247.0
+  },
+  {
+    "name": "SALAMAH",
+    "dwt": 2958.0
+  },
+  {
+    "name": "SEA ABUNDANCE",
+    "dwt": 4424.0
+  },
+  {
+    "name": "SEA BOUNTIFUL",
+    "dwt": 4235.0
+  },
+  {
+    "name": "SEA BRILLIANCE",
+    "dwt": 6989.0
+  },
+  {
+    "name": "SEA DIGNITY",
+    "dwt": 803.0
+  },
+  {
+    "name": "SEA DILIGENCE",
+    "dwt": 4233.0
+  },
+  {
+    "name": "SEA ENDURANCE",
+    "dwt": 3578.0
+  },
+  {
+    "name": "SEA FORTITUDE",
+    "dwt": 978.0
+  },
+  {
+    "name": "SEA HARVEST",
+    "dwt": 4402.0
+  },
+  {
+    "name": "SEA LONGEVITY",
+    "dwt": 4411.0
+  },
+  {
+    "name": "SEA LOYALTY",
+    "dwt": 3987.0
+  },
+  {
+    "name": "SEA PROSPERITY",
+    "dwt": 4421.0
+  },
+  {
+    "name": "SEA RELIANCE",
+    "dwt": 4999.0
+  },
+  {
+    "name": "SEA SERENITY",
+    "dwt": 6964.0
+  },
+  {
+    "name": "SEA SOLIDARITY",
+    "dwt": 2950.0
+  },
+  {
+    "name": "SEA UNITY",
+    "dwt": 9106.0
+  },
+  {
+    "name": "SEVERN",
+    "dwt": 1615.0
+  },
+  {
+    "name": "SHOREA",
+    "dwt": 4387.0
+  },
+  {
+    "name": "SINCERITY",
+    "dwt": 5683.0
+  },
+  {
+    "name": "SOPHIA",
+    "dwt": 7999.0
+  },
+  {
+    "name": "SPRING FORTUNE",
+    "dwt": 7496.0
+  },
+  {
+    "name": "STAR 2",
+    "dwt": 805.0
+  },
+  {
+    "name": "STAR QUEST",
+    "dwt": 5618.0
+  },
+  {
+    "name": "STRAITS ABUNDANCE",
+    "dwt": 7000.0
+  },
+  {
+    "name": "STRAITS BRILLIANCE",
+    "dwt": 3606.0
+  },
+  {
+    "name": "STRAITS ETERNITY",
+    "dwt": 800.0
+  },
+  {
+    "name": "STRAITS GRACIOUS",
+    "dwt": 5518.0
+  },
+  {
+    "name": "STRAITS HARMONY",
+    "dwt": 2960.0
+  },
+  {
+    "name": "STRAITS INTEGRITY",
+    "dwt": 6020.0
+  },
+  {
+    "name": "STRAITS JUBILANT",
+    "dwt": 7203.0
+  },
+  {
+    "name": "STRAITS MUNIFICENT",
+    "dwt": 3911.0
+  },
+  {
+    "name": "STRAITS NOMURA",
+    "dwt": 8722.0
+  },
+  {
+    "name": "STRAITS ORACLE",
+    "dwt": 3941.0
+  },
+  {
+    "name": "SYNERGY",
+    "dwt": 507.0
+  },
+  {
+    "name": "THAMES",
+    "dwt": 7420.0
+  },
+  {
+    "name": "TICO CAPRICORN",
+    "dwt": 1124.0
+  },
+  {
+    "name": "TITANIA",
+    "dwt": 7999.0
+  },
+  {
+    "name": "TRINITY",
+    "dwt": 2240.0
+  },
+  {
+    "name": "UNI SUPPLY 1",
+    "dwt": 507.0
+  },
+  {
+    "name": "VANDA ADVENTURE",
+    "dwt": 6989.0
+  },
+  {
+    "name": "VANDA SUCCESS",
+    "dwt": 7008.0
+  },
+  {
+    "name": "VENUS",
+    "dwt": 6985.0
+  },
+  {
+    "name": "VITALITY",
+    "dwt": 5702.0
+  },
+  {
+    "name": "WEITEK 18",
+    "dwt": 1987.0
+  },
+  {
+    "name": "WISDOM",
+    "dwt": 3610.0
+  },
+  {
+    "name": "ZAFER",
+    "dwt": 3941.0
+  },
+  {
+    "name": "ZALE",
+    "dwt": 2523.0
+  },
+  {
+    "name": "ZEMIRA",
+    "dwt": 3876.0
+  },
+  {
+    "name": "ZEVIROUS",
+    "dwt": 2523.0
+  },
+  {
+    "name": "ZMAGA",
+    "dwt": 4784.0
+  },
+  {
+    "name": "ZOEY",
+    "dwt": 2523.0
+  },
+  {
+    "name": "BEE 1",
+    "dwt": 104.0
+  },
+  {
+    "name": "CNC 6",
+    "dwt": 104.0
+  },
+  {
+    "name": "GARENE I",
+    "dwt": 127.0
+  },
+  {
+    "name": "GARENE II",
+    "dwt": 127.0
+  }
+]

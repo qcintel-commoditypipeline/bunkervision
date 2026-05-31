@@ -1,0 +1,16 @@
+flask>=3.0
+duckdb>=0.10
+pandas>=2.2
+plotly>=5.20
+requests>=2.31
+beautifulsoup4>=4.12
+websocket-client>=1.7
+geopy>=2.4
+python-dotenv>=1.0
+loguru>=0.7
+tenacity>=8.2
+apscheduler>=3.10
+pyodbc>=5.0
+pdfplumber>=0.11
+openpyxl>=3.1
+pymysql>=1.1

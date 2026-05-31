@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% block title %}{{ port_cfg.name }} — BunkerVision{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex align-items-center justify-content-between mb-2">
+  <div>
+    <h5 class="mb-0 fw-semibold">{{ port_cfg.name }} Bunker Demand Tracker</h5>
+    <div class="subtitle">
+      {% if port_cfg.has_registry %}
+        Real-time bunkering event detection · AIS-derived demand estimation
+      {% elif port_cfg.data_source %}
+        Historical demand data · Live AIS vessel positions
+      {% else %}
+        Live AIS vessel positions
+      {% endif %}
+    </div>
+  </div>
+  <div class="text-muted" style="font-size:0.75rem" id="last-updated"></div>
+</div>
+
+<!-- KPI row -->
+<div class="row g-2 mb-3" id="kpi-row">
+  {% if port_cfg.has_registry %}
+  <div class="col-6 col-md-3">
+    <div class="kpi-card" id="kpi-active">
+      <div class="kpi-label">Active Events</div>
+      <div class="kpi-val" id="kv-active">—</div>
+      <div class="kpi-sub">bunkering right now</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card" id="kpi-vessels">
+      <div class="kpi-label">Tracked Vessels</div>
+      <div class="kpi-val" id="kv-vessels">—</div>
+      <div class="kpi-sub" id="kv-vessels-sub">bunker craft in registry</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card" id="kpi-mtd">
+      <div class="kpi-label">MTD Estimated Demand</div>
+      <div class="kpi-val" id="kv-mtd">—</div>
+      <div class="kpi-sub" id="kv-mtd-sub">mt detected this month</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card" id="kpi-proj">
+      <div class="kpi-label">Projected Full-Month</div>
+      <div class="kpi-val" id="kv-proj">—</div>
+      <div class="kpi-sub" id="kv-proj-sub">vs seasonal average</div>
+    </div>
+  </div>
+  {% else %}
+  <div class="col-6 col-md-3">
+    <div class="kpi-card">
+      <div class="kpi-label">Live AIS Vessels</div>
+      <div class="kpi-val" id="kv-live">—</div>
+      <div class="kpi-sub">in port area now</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card">
+      <div class="kpi-label">Last Official Data</div>
+      <div class="kpi-val" id="kv-last-vol">—</div>
+      <div class="kpi-sub" id="kv-last-month">—</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card">
+      <div class="kpi-label">Seasonal Avg</div>
+      <div class="kpi-val" id="kv-seasonal">—</div>
+      <div class="kpi-sub">this {{ port_cfg.data_frequency or 'period' }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-card" id="kpi-no-registry">
+      <div class="kpi-label">Detection</div>
+      <div class="kpi-val" style="font-size:1rem;color:#8b949e;">No Registry</div>
+      <div class="kpi-sub">AIS tracking only</div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Map + event feed -->
+<div class="row g-2 mb-3">
+  <div class="col-12 col-xl-8">
+    <div class="card" style="height:520px">
+      <div id="map" style="height:100%;border-radius:8px;"></div>
+    </div>
+  </div>
+  <div class="col-12 col-xl-4">
+    <div class="card" style="height:520px;overflow:hidden;display:flex;flex-direction:column;">
+      <div class="px-3 pt-3 pb-2 d-flex align-items-center justify-content-between border-bottom border-secondary border-opacity-25">
+        <span class="section-label mb-0">
+          {% if port_cfg.has_registry %}Live Event Feed{% else %}Live Vessel Feed{% endif %}
+        </span>
+        <span id="event-count-badge" class="badge rounded-pill"
+              style="background:rgba(88,166,255,0.15);color:#58a6ff;font-size:0.7rem">0 active</span>
+      </div>
+      <div id="event-feed" style="overflow-y:auto;flex:1;padding:0.5rem 0.75rem;font-size:0.8rem;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Demand chart -->
+<div class="row g-2">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body pb-2">
+        <div class="section-label">
+          {% if port_cfg.has_registry %}
+            {{ port_cfg.name | upper }} BUNKER SALES - AIS PROJECTED VS OFFICIAL
+          {% else %}
+            {{ port_cfg.name | upper }} BUNKER SALES{% if port_cfg.data_frequency == 'quarterly' %} (QUARTERLY){% endif %}
+            {% if not port_cfg.data_source %}<span class="text-muted" style="font-size:0.75rem"> - AIS only, no official data</span>{% endif %}
+          {% endif %}
+        </div>
+        <div id="demand-chart" style="min-height:260px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/map.js') }}"></script>
+<script>
+const MAP_CENTRE   = {{ map_centre | tojson }};
+const MAPBOX_TOKEN = {{ mapbox_token | tojson }};
+const PORT_CFG     = {{ port_cfg | tojson }};
+// CURRENT_PORT is already set in base.html
+
+// ── KPI polling ────────────────────────────────────────────────────────────────
+async function refreshKPIs() {
+  try {
+    const [stats, demand] = await Promise.all([
+      fetch(`/api/stats?port=${CURRENT_PORT}`).then(r => r.json()),
+      fetch(`/api/demand?port=${CURRENT_PORT}`).then(r => r.json()),
+    ]);
+
+    if (PORT_CFG.has_registry) {
+      document.getElementById('kv-active').textContent  = stats.active_events.toLocaleString();
+      document.getElementById('kv-vessels').textContent = stats.vessel_count.toLocaleString();
+      document.getElementById('kv-vessels-sub').textContent = `${stats.live_positions.toLocaleString()} live on AIS`;
+
+      document.getElementById('kv-mtd').textContent = demand.estimated_mt
+        ? Math.round(demand.estimated_mt / 1000).toLocaleString() + 'k mt' : '—';
+      document.getElementById('kv-mtd-sub').textContent =
+        `${demand.event_count} events · day ${demand.days_elapsed}/${demand.days_in_month}`;
+
+      const proj  = demand.projected_month_mt;
+      const pct   = demand.pct_vs_seasonal;
+      document.getElementById('kv-proj').textContent = proj ? Math.round(proj/1000).toLocaleString()+'k mt' : '—';
+      const projEl = document.getElementById('kpi-proj');
+      projEl.classList.remove('kpi-accent-pos','kpi-accent-neg');
+      let subText = '';
+      if (pct !== null && pct !== undefined) {
+        const sign = pct >= 0 ? '+' : '';
+        subText = `${sign}${pct}% vs seasonal avg`;
+        projEl.classList.add(pct >= 0 ? 'kpi-accent-pos' : 'kpi-accent-neg');
+      } else if (demand.seasonal_avg_mt) {
+        subText = `seasonal avg ${Math.round(demand.seasonal_avg_mt/1000).toLocaleString()}k mt`;
+      }
+      document.getElementById('kv-proj-sub').textContent = subText;
+
+      const activeEl = document.getElementById('kpi-active');
+      activeEl.classList.remove('kpi-accent-pos','kpi-accent-neg');
+      if (stats.active_events > 0) activeEl.classList.add('kpi-accent-pos');
+
+    } else {
+      // Non-registry port
+      const liveEl = document.getElementById('kv-live');
+      if (liveEl) liveEl.textContent = stats.live_positions.toLocaleString();
+
+      const lastVolEl   = document.getElementById('kv-last-vol');
+      const lastMonthEl = document.getElementById('kv-last-month');
+      if (lastVolEl && demand.last_official_mt) {
+        lastVolEl.textContent = Math.round(demand.last_official_mt / 1000).toLocaleString() + 'k mt';
+      }
+      if (lastMonthEl && demand.last_official_month) {
+        lastMonthEl.textContent = demand.last_official_month.slice(0, 7);
+      }
+
+      const seasonalEl = document.getElementById('kv-seasonal');
+      if (seasonalEl && demand.seasonal_avg_mt) {
+        seasonalEl.textContent = Math.round(demand.seasonal_avg_mt / 1000).toLocaleString() + 'k mt';
+      }
+    }
+
+    document.getElementById('last-updated').textContent =
+      'Updated ' + new Date().toLocaleTimeString();
+  } catch(e) {}
+}
+
+// ── Event / vessel feed ────────────────────────────────────────────────────────
+async function refreshEventFeed() {
+  if (PORT_CFG.has_registry) {
+    const events = await fetch(`/api/events?limit=30&port=${CURRENT_PORT}`).then(r => r.json()).catch(() => []);
+    const feed  = document.getElementById('event-feed');
+    const badge = document.getElementById('event-count-badge');
+    const active = events.filter(e => e.open).length;
+    badge.textContent = `${active} active`;
+
+    feed.innerHTML = events.map(ev => {
+      const statusColour = ev.open ? '#3fb950' : '#8b949e';
+      const statusDot = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${statusColour};margin-right:6px;flex-shrink:0;margin-top:3px;"></span>`;
+      const dur = ev.duration_min ? `${ev.duration_min} min` : ev.open ? 'ongoing' : '?';
+      const mt  = ev.estimated_mt ? `~${ev.estimated_mt.toLocaleString()} mt` : '';
+      const ts  = ev.start_ts ? new Date(ev.start_ts).toLocaleString() : '';
+      return `
+        <div class="event-feed-item d-flex" style="margin-bottom:0.65rem;padding-bottom:0.65rem;border-bottom:1px solid rgba(48,54,61,0.5);">
+          ${statusDot}
+          <div>
+            <div style="color:#e6edf3;font-weight:500;">${ev.bunker_name || ev.bunker_imo || 'Unknown bunker'}</div>
+            <div style="color:#8b949e;">alongside ${ev.recipient_name || ev.recipient_mmsi || 'unknown'}</div>
+            <div style="color:#8b949e;font-size:0.72rem;">${dur}${mt ? ' · ' + mt : ''} · ${ts}</div>
+          </div>
+        </div>`;
+    }).join('') || '<div style="color:#8b949e;padding:1rem 0;">No events detected yet</div>';
+
+  } else {
+    // Show live vessel list for non-registry ports
+    try {
+      const positions = await fetch(`/api/positions?port=${CURRENT_PORT}`).then(r => r.json());
+      const feed  = document.getElementById('event-feed');
+      const badge = document.getElementById('event-count-badge');
+      badge.textContent = `${positions.length} vessels`;
+      const sorted = positions.slice().sort((a, b) => (b.sog||0) - (a.sog||0));
+      feed.innerHTML = sorted.slice(0, 40).map(v => {
+        const sogStr = parseFloat(v.sog || 0).toFixed(1) + ' kt';
+        return `
+          <div class="d-flex justify-content-between" style="margin-bottom:0.45rem;font-size:0.78rem;border-bottom:1px solid rgba(48,54,61,0.3);padding-bottom:0.4rem;">
+            <span style="color:#e6edf3;font-weight:500;">${v.name || v.mmsi}</span>
+            <span style="color:#8b949e;">${sogStr}</span>
+          </div>`;
+      }).join('') || '<div style="color:#8b949e;padding:1rem 0;">No vessels in range</div>';
+    } catch(e) {}
+  }
+}
+
+// ── Demand chart ───────────────────────────────────────────────────────────────
+loadChart('demand-chart', `/api/demand_chart?port=${CURRENT_PORT}`);
+
+// ── Init & polling ─────────────────────────────────────────────────────────────
+refreshKPIs();
+refreshEventFeed();
+setInterval(refreshKPIs, 30_000);
+setInterval(refreshEventFeed, 20_000);
+setInterval(() => loadChart('demand-chart', `/api/demand_chart?port=${CURRENT_PORT}`), 120_000);
+</script>
+{% endblock %}

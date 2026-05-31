@@ -1,0 +1,466 @@
+{% extends "base.html" %}
+{% block title %}Prices — BunkerVision{% endblock %}
+
+{% block content %}
+{% macro fmt(v, dp=2) %}{% if v is not none %}{{ '{:,.{}f}'.format(v, dp) }}{% else %}—{% endif %}{% endmacro %}
+{% macro chg(v) %}
+  {% if v is not none %}
+    <span class="{% if v > 0 %}text-danger{% elif v < 0 %}text-success{% else %}text-muted{% endif %}">
+      {{ '+' if v > 0 else '' }}{{ '%+.1f'|format(v) }}
+    </span>
+  {% else %}<span class="text-muted">—</span>{% endif %}
+{% endmacro %}
+{% macro prem(v) %}
+  {% if v is not none %}
+    <span class="{% if v > 0 %}text-warning{% else %}text-success{% endif %}" style="font-size:0.78rem;">
+      {{ '%+.1f'|format(v) }}
+    </span>
+  {% else %}<span class="text-muted">—</span>{% endif %}
+{% endmacro %}
+
+{# ── Page header ───────────────────────────────────────────────────────────── #}
+<div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-2">
+  <div>
+    <h5 class="mb-0 fw-semibold">Global Bunker Prices</h5>
+    <div class="subtitle">Ship &amp; Bunker · Integr8 · Quantum — {{ all_ports|length }} ports — USD/MT</div>
+  </div>
+  <select id="region-filter" class="form-select form-select-sm" style="width:auto;"
+          onchange="filterRegion(this.value)">
+    <option value="">All regions</option>
+    {% for r in ['Asia-Pacific','Middle East','Europe','Americas','Africa'] %}
+    <option value="{{ r }}">{{ r }}</option>
+    {% endfor %}
+  </select>
+</div>
+
+{# ── Hero chart ────────────────────────────────────────────────────────────── #}
+{% set day_labels = {30:'30d', 60:'60d', 90:'90d', 180:'6m', 365:'1yr', 730:'2yr', 0:'All'} %}
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+
+      {# Port selector #}
+      <select id="hero-port-select" class="form-select form-select-sm"
+              style="width:auto;min-width:175px;"
+              onchange="selectPort(this.value, this.options[this.selectedIndex].text.trim())">
+        {% set regions_order = ['Asia-Pacific','Middle East','Europe','Americas','Africa'] %}
+        {% for region in regions_order %}
+          {% set rports = all_ports | selectattr('region','eq',region) | list %}
+          {% if rports %}
+          <optgroup label="{{ region }}">
+            {% for p in rports %}
+            <option value="{{ p.key }}" {% if p.key == hub %}selected{% endif %}>{{ p.port }}</option>
+            {% endfor %}
+          </optgroup>
+          {% endif %}
+        {% endfor %}
+      </select>
+
+      {# Grade #}
+      <div class="btn-group btn-group-sm" role="group" id="hero-grade-btns">
+        {% for g in grades %}
+        <button type="button" data-grade="{{ g }}"
+                class="btn {{ 'btn-primary' if g == grade else 'btn-outline-secondary' }}"
+                onclick="selectGrade('{{ g }}')">
+          {{ {'VLSFO':'VLSFO','HSFO':'HSFO 380','LSMGO':'LSMGO','MGO':'MGO'}[g] }}
+        </button>
+        {% endfor %}
+      </div>
+
+      {# Period #}
+      <div class="btn-group btn-group-sm" role="group" id="hero-days-btns">
+        {% for d in [30, 60, 90, 180, 365, 730, 0] %}
+        <button type="button" data-days="{{ d }}"
+                class="btn {{ 'btn-primary' if d == days else 'btn-outline-secondary' }}"
+                onclick="selectDays({{ d }})">{{ day_labels[d] }}</button>
+        {% endfor %}
+      </div>
+
+      {# Source legend #}
+      <div class="ms-auto d-none d-lg-flex gap-3" style="font-size:0.71rem;color:var(--muted);">
+        <span><span style="color:#8b949e;">─ ─</span> Quantum FOB</span>
+        <span><span style="color:#3fb950;">—</span> Quantum bunker</span>
+        <span><span style="color:#58a6ff;">—</span> Ship &amp; Bunker</span>
+        <span><span style="color:#f0883e;">—</span> Integr8</span>
+      </div>
+    </div>
+
+    <div id="hero-chart" style="height:420px;"></div>
+  </div>
+</div>
+
+{# ── Two-column layout: table left, detail right ───────────────────────────── #}
+<div class="row g-3" id="prices-layout">
+
+  {# ── All-ports overview table ────────────────────────────────────────────── #}
+  <div class="col-12 col-xl-7" id="ports-col">
+    <div class="card">
+      <div class="card-body p-0">
+        <table class="table table-dark table-hover mb-0" id="ports-table"
+               style="font-size:0.8rem;">
+          <thead>
+            <tr>
+              <th style="width:18%">Port</th>
+              <th style="width:8%" class="text-muted d-none d-md-table-cell">Region</th>
+              <th class="text-end" id="th-vlsfo" style="color:#58a6ff">VLSFO</th>
+              <th class="text-end" id="th-hsfo" style="color:#8b949e">HSFO</th>
+              <th class="text-end" id="th-hi5" style="color:#3fb950">Hi-5</th>
+              <th class="text-end d-none d-lg-table-cell" id="th-lsmgo" style="color:#e6c84a">LSMGO</th>
+              <th class="text-end d-none d-lg-table-cell" id="th-wow">WoW</th>
+              <th class="text-end d-none d-lg-table-cell" id="th-sales"
+                  style="color:#8b949e;font-size:0.72rem;">Sales data</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in all_ports %}
+            {% set sales_label = p.sales %}
+            <tr class="port-row {{ 'table-active fw-semibold' if p.key == hub else '' }}"
+                data-hub="{{ p.key }}"
+                data-region="{{ p.region }}"
+                style="cursor:pointer;"
+                onclick="selectPort('{{ p.key }}', '{{ p.port }}')">
+              <td>
+                <span class="port-name">{{ p.port }}</span>
+                {% if p.i8_vlsfo %}<span class="ms-1" style="font-size:0.65rem;color:#f0883e;" title="Integr8 also has data">●</span>{% endif %}
+              </td>
+              <td class="text-muted d-none d-md-table-cell" style="font-size:0.72rem;">
+                <span class="badge" style="background:rgba(255,255,255,0.07);color:#8b949e;font-weight:400;">{{ p.region }}</span>
+              </td>
+              <td class="text-end fw-medium" style="color:#58a6ff;">{{ fmt(p.vlsfo, 0) }}</td>
+              <td class="text-end" style="color:#8b949e;">{{ fmt(p.hsfo, 0) }}</td>
+              <td class="text-end fw-medium
+                {% if p.hi5 is not none %}
+                  {% if p.hi5 > 100 %}text-success{% elif p.hi5 < 40 %}text-muted{% endif %}
+                {% endif %}">
+                {% if p.hi5 is not none %}{{ '%+.0f'|format(p.hi5) }}{% else %}—{% endif %}
+              </td>
+              <td class="text-end d-none d-lg-table-cell" style="color:#e6c84a;">{{ fmt(p.lsmgo, 0) }}</td>
+              <td class="text-end d-none d-lg-table-cell">{{ chg(p.wow) }}</td>
+              <td class="text-end d-none d-lg-table-cell">
+                {% if sales_label %}
+                  <span class="badge" style="background:rgba(63,185,80,0.12);color:#3fb950;font-size:0.65rem;">
+                    {{ sales_label }}
+                  </span>
+                {% else %}
+                  <span class="text-muted" style="font-size:0.75rem;">—</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  {# ── Port detail panel ───────────────────────────────────────────────────── #}
+  <div class="col-12 col-xl-5" id="detail-col">
+
+    {# Port header #}
+    <div class="d-flex align-items-center justify-content-between mb-2 px-1">
+      <div>
+        <h6 class="mb-0 fw-semibold" id="detail-port-name">{{ hub.replace('_',' ').title() }}</h6>
+        <div class="text-muted" style="font-size:0.75rem;" id="detail-sub">
+          <span id="detail-grade">{{ grade }}</span> ·
+          <span id="detail-date">loading…</span>
+        </div>
+      </div>
+      <span id="detail-region-badge" class="badge"
+            style="background:rgba(88,166,255,0.1);color:#58a6ff;font-size:0.72rem;">
+        {{ all_ports | selectattr('key','eq',hub) | map(attribute='region') | first | default('') }}
+      </span>
+    </div>
+
+    {# KPI cards — 2×2 grid #}
+    <div class="row g-2 mb-3" id="kpi-cards">
+      <div class="col-6">
+        <div class="kpi-card" style="border-left:3px solid #58a6ff;">
+          <div class="kpi-label" style="color:#58a6ff;">Ship &amp; Bunker</div>
+          <div class="kpi-val" id="kpi-sb">—</div>
+          <div class="kpi-sub" id="kpi-sb-sub"></div>
+        </div>
+      </div>
+      <div class="col-6">
+        <div class="kpi-card" style="border-left:3px solid #f0883e;">
+          <div class="kpi-label" style="color:#f0883e;">Integr8</div>
+          <div class="kpi-val" id="kpi-i8">—</div>
+          <div class="kpi-sub" id="kpi-i8-sub"></div>
+        </div>
+      </div>
+      <div class="col-6">
+        <div class="kpi-card" style="border-left:3px solid #8b949e;">
+          <div class="kpi-label" style="color:#8b949e;">Quantum cargo (FOB)</div>
+          <div class="kpi-val" id="kpi-qc">—</div>
+          <div class="kpi-sub" id="kpi-qc-sub"></div>
+        </div>
+      </div>
+      <div class="col-6">
+        <div class="kpi-card kpi-accent-pos">
+          <div class="kpi-label" style="color:#3fb950;">Quantum bunker</div>
+          <div class="kpi-val" id="kpi-qb">—</div>
+          <div class="kpi-sub" id="kpi-qb-sub"></div>
+        </div>
+      </div>
+    </div>
+
+    {# ── Bunker Sales ──────────────────────────────────────────────────────── #}
+    <div class="card" id="sales-card">
+      <div class="card-body">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <span class="section-label mb-0">Bunker Sales</span>
+          <span id="sales-badge" class="badge bg-secondary" style="font-size:0.68rem;">
+            loading…
+          </span>
+        </div>
+
+        <div id="sales-data-section" style="display:none;">
+          <div class="row g-2 mb-2" id="sales-kpis"></div>
+          <div class="text-muted" id="sales-period" style="font-size:0.72rem;"></div>
+        </div>
+
+        <div id="sales-placeholder-section">
+          <div class="text-center py-3" style="color:#8b949e;font-size:0.8rem;">
+            <div style="font-size:1.4rem;margin-bottom:8px;opacity:0.4;">📊</div>
+            <div class="fw-medium mb-1">No official sales data available</div>
+            <div style="font-size:0.72rem;">
+              Sales figures available for Singapore (MPA), Rotterdam, Antwerp, Panama &amp; Fujairah
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{# ── Quantum overview strip (SG + RTM only, below) ─────────────────────────── #}
+<div class="mt-3">
+  <div class="section-label mb-2">Quantum assessments — Singapore &amp; Rotterdam</div>
+  <div class="card">
+    <div class="card-body p-0">
+      <table class="table table-dark table-hover mb-0" style="font-size:0.8rem;">
+        <thead>
+          <tr>
+            <th>Hub / Grade</th>
+            <th class="text-end" style="color:#8b949e;">Quantum cargo</th>
+            <th class="text-end" style="color:#3fb950;">Quantum bunker</th>
+            <th class="text-end" style="color:#58a6ff;">S&amp;B</th>
+            <th class="text-end" style="color:#f0883e;">Integr8</th>
+            <th class="text-end text-muted">I8 vs cargo</th>
+            <th class="text-end text-muted">S&amp;B vs cargo</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for h in ['singapore', 'rotterdam'] %}
+            {% for g in ['HSFO', 'VLSFO'] %}
+              {% set row = latest_all[(h, g)] %}
+              <tr style="cursor:pointer"
+                  onclick="selectPort('{{ h }}', '{{ h.replace('_',' ').title() }}'); selectGrade('{{ g }}')">
+                <td>
+                  <span class="fw-medium">{{ h.capitalize() }}</span>
+                  <span class="badge ms-1" style="background:rgba(88,166,255,0.12);color:#58a6ff;font-size:0.68rem;">
+                    {{ 'HSFO 380' if g == 'HSFO' else 'VLSFO 0.5%' }}
+                  </span>
+                </td>
+                <td class="text-end fw-medium" style="color:#8b949e;">
+                  {{ fmt(row.quantum_cargo.value) }}
+                  <div class="text-muted" style="font-size:0.65rem;">{{ row.quantum_cargo.code }}</div>
+                </td>
+                <td class="text-end fw-medium" style="color:#3fb950;">{{ fmt(row.quantum_bunker.value) }}</td>
+                <td class="text-end fw-medium" style="color:#58a6ff;">{{ fmt(row.sb.value) }}</td>
+                <td class="text-end fw-medium" style="color:#f0883e;">{{ fmt(row.integr8.value) }}</td>
+                <td class="text-end">{{ prem(row.premium_integr8) }}</td>
+                <td class="text-end">{{ prem(row.premium_sb) }}</td>
+              </tr>
+            {% endfor %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── State ──────────────────────────────────────────────────────────────────────
+let CURRENT_HUB   = {{ hub   | tojson }};
+let CURRENT_GRADE = {{ grade | tojson }};
+let CURRENT_DAYS  = {{ days  | tojson }};
+
+const SALES = {{ sales_summary | tojson }};
+
+const ALL_PORTS = {
+  {% for p in all_ports %}
+  "{{ p.key }}": {
+    name: {{ p.port | tojson }},
+    region: {{ p.region | tojson }},
+    sales: {{ p.sales | tojson }},
+    vlsfo: {{ p.vlsfo | tojson }},
+    hsfo:  {{ p.hsfo  | tojson }},
+    lsmgo: {{ p.lsmgo | tojson }},
+    mgo:   {{ p.mgo   | tojson }},
+    hi5:   {{ p.hi5   | tojson }},
+    wow:   {{ p.wow   | tojson }},
+    date:  {{ p.date  | tojson }},
+  },
+  {% endfor %}
+};
+
+// ── Highlight active row ───────────────────────────────────────────────────────
+function setActiveRow(hub) {
+  document.querySelectorAll('.port-row').forEach(r => {
+    const active = r.dataset.hub === hub;
+    r.classList.toggle('table-active', active);
+    r.classList.toggle('fw-semibold', active);
+  });
+}
+
+// ── Update detail panel text ───────────────────────────────────────────────────
+function updateDetailMeta(hub, grade) {
+  const p = ALL_PORTS[hub];
+  if (!p) return;
+  document.getElementById('detail-port-name').textContent = p.name;
+  document.getElementById('detail-grade').textContent     = grade;
+  document.getElementById('detail-date').textContent      = p.date || '—';
+  document.getElementById('detail-region-badge').textContent = p.region;
+}
+
+// ── Fetch latest KPI prices ────────────────────────────────────────────────────
+function updateKPIs(hub, grade) {
+  fetch(`/api/prices/latest?hub=${hub}&grade=${grade}`)
+    .then(r => r.json())
+    .then(d => {
+      const fmt = v => v != null ? '$' + v.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '—';
+      const fmtPrem = v => v != null ? (v > 0 ? '+' : '') + v.toFixed(1) + ' vs cargo' : '';
+      document.getElementById('kpi-sb').textContent     = fmt(d.sb?.value);
+      document.getElementById('kpi-sb-sub').textContent = d.sb?.date || '';
+      document.getElementById('kpi-i8').textContent     = fmt(d.integr8?.value);
+      document.getElementById('kpi-i8-sub').textContent = d.integr8?.date || '';
+      document.getElementById('kpi-qc').textContent     = fmt(d.quantum_cargo?.value);
+      document.getElementById('kpi-qc-sub').textContent = (d.quantum_cargo?.code || '') +
+        (d.quantum_cargo?.date ? ' · ' + d.quantum_cargo.date : '');
+      document.getElementById('kpi-qb').textContent     = fmt(d.quantum_bunker?.value);
+      document.getElementById('kpi-qb-sub').textContent = fmtPrem(d.premium_qbunker);
+    })
+    .catch(() => {});
+}
+
+// ── Render hero chart ──────────────────────────────────────────────────────────
+function updateChart(hub, grade, days) {
+  loadChart('hero-chart', `/api/prices/chart?hub=${hub}&grade=${grade}&days=${days}`);
+}
+
+// ── Sales section ──────────────────────────────────────────────────────────────
+function updateSales(hub) {
+  const p        = ALL_PORTS[hub];
+  const badge    = document.getElementById('sales-badge');
+  const dataEl   = document.getElementById('sales-data-section');
+  const phEl     = document.getElementById('sales-placeholder-section');
+  const kpisEl   = document.getElementById('sales-kpis');
+  const periodEl = document.getElementById('sales-period');
+
+  const salesEntry = SALES[hub] || SALES[p?.name?.toLowerCase()] || null;
+
+  if (salesEntry && Object.keys(salesEntry).length > 0) {
+    badge.className = 'badge';
+    badge.style.background = 'rgba(63,185,80,0.15)';
+    badge.style.color = '#3fb950';
+    badge.textContent = p?.sales || 'Available';
+    dataEl.style.display = '';
+    phEl.style.display = 'none';
+
+    let html = '', period = '';
+    const GRADE_ORDER = ['VLSFO','HSFO','LSMGO','MGO','LNG','Methanol','Biofuels','ULSFO','MDO',
+                         'FO_Unspecified','Ammonia','Kerosene','Naphtha','MTBE','Ethanol','TOTAL'];
+    const sorted = Object.entries(salesEntry)
+      .filter(([, row]) => row.volume_mt > 0)
+      .sort(([a], [b]) => {
+        const ai = GRADE_ORDER.indexOf(a), bi = GRADE_ORDER.indexOf(b);
+        if (ai === -1 && bi === -1) return a.localeCompare(b);
+        if (ai === -1) return 1;
+        if (bi === -1) return -1;
+        return ai - bi;
+      });
+    for (const [fuel, row] of sorted) {
+      const vol   = row.volume_mt   != null ? (row.volume_mt / 1000).toFixed(0) + 'k mt' : '—';
+      const ships = row.ships_count != null ? row.ships_count + ' ships' : '';
+      html += `<div class="col-6">
+        <div class="kpi-card" style="padding:10px 14px;">
+          <div class="kpi-label">${fuel}</div>
+          <div class="kpi-val" style="font-size:1.2rem;">${vol}</div>
+          <div class="kpi-sub">${ships}</div>
+        </div>
+      </div>`;
+      period = row.month;
+    }
+    kpisEl.innerHTML = html;
+    periodEl.textContent = period ? 'Latest period: ' + period : '';
+  } else {
+    badge.className = 'badge bg-secondary';
+    badge.style.background = '';
+    badge.style.color = '';
+    badge.textContent = 'No data';
+    dataEl.style.display = 'none';
+    phEl.style.display = '';
+  }
+}
+
+// ── Port selection ─────────────────────────────────────────────────────────────
+function selectPort(hub, name) {
+  CURRENT_HUB = hub;
+  setActiveRow(hub);
+  updateDetailMeta(hub, CURRENT_GRADE);
+  updateKPIs(hub, CURRENT_GRADE);
+  updateChart(hub, CURRENT_GRADE, CURRENT_DAYS);
+  updateSales(hub);
+  const sel = document.getElementById('hero-port-select');
+  if (sel) sel.value = hub;
+  history.replaceState({}, '', `/prices?hub=${hub}&grade=${CURRENT_GRADE}&days=${CURRENT_DAYS}`);
+  // Scroll detail panel into view on narrow screens
+  const det = document.getElementById('detail-col');
+  if (det && window.innerWidth < 1200) det.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function selectGrade(grade) {
+  CURRENT_GRADE = grade;
+  document.querySelectorAll('#hero-grade-btns button').forEach(b => {
+    b.className = 'btn btn-sm ' + (b.dataset.grade === grade ? 'btn-primary' : 'btn-outline-secondary');
+  });
+  document.getElementById('detail-grade').textContent = grade;
+  updateKPIs(CURRENT_HUB, grade);
+  updateChart(CURRENT_HUB, grade, CURRENT_DAYS);
+  history.replaceState({}, '', `/prices?hub=${CURRENT_HUB}&grade=${grade}&days=${CURRENT_DAYS}`);
+}
+
+function selectDays(days) {
+  CURRENT_DAYS = days;
+  document.querySelectorAll('#hero-days-btns button').forEach(b => {
+    b.className = 'btn btn-sm ' + (parseInt(b.dataset.days) === days ? 'btn-primary' : 'btn-outline-secondary');
+  });
+  updateChart(CURRENT_HUB, CURRENT_GRADE, days);
+  history.replaceState({}, '', `/prices?hub=${CURRENT_HUB}&grade=${CURRENT_GRADE}&days=${days}`);
+}
+
+// ── Region filter ──────────────────────────────────────────────────────────────
+function filterRegion(region) {
+  document.querySelectorAll('.port-row').forEach(r => {
+    r.style.display = (!region || r.dataset.region === region) ? '' : 'none';
+  });
+}
+
+// ── Scroll active row into view on load ───────────────────────────────────────
+function scrollToActive() {
+  const active = document.querySelector('.port-row.table-active');
+  if (active) active.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+updateDetailMeta(CURRENT_HUB, CURRENT_GRADE);
+updateKPIs(CURRENT_HUB, CURRENT_GRADE);
+updateChart(CURRENT_HUB, CURRENT_GRADE, CURRENT_DAYS);
+updateSales(CURRENT_HUB);
+</script>
+{% endblock %}

@@ -1,0 +1,452 @@
+"""
+Demand estimation model — port-aware.
+Computes seasonal averages and projects current-month demand from detected bunkering events.
+For ports without AIS event detection, returns historical/official figures only.
+"""
+from __future__ import annotations
+
+import calendar
+from datetime import date, datetime, timedelta, timezone
+
+import db
+from config import DEFAULT_PUMP_RATE_MT_MIN, PORTS
+
+
+def _db_port(port: str) -> str:
+    """Map config key to the port name stored in port_bunker_sales."""
+    return PORTS.get(port, {}).get("db_port", port)
+
+
+def seasonal_avg_monthly_volume(month: int, port: str = "singapore",
+                                 fuel_type: str = "TOTAL") -> float | None:
+    """Return the historical average volume for calendar month `month` (1-12)."""
+    rows = db.query("""
+        SELECT AVG(volume_mt)
+        FROM port_bunker_sales
+        WHERE port = ? AND MONTH(month) = ? AND fuel_type = ?
+    """, [_db_port(port), month, fuel_type])
+    if rows and rows[0][0] is not None:
+        return float(rows[0][0])
+
+    if port == "singapore":
+        rows = db.query("""
+            SELECT AVG(volume_mt) FROM mpa_monthly
+            WHERE MONTH(month) = ? AND fuel_type = ?
+        """, [month, fuel_type])
+        if rows and rows[0][0] is not None:
+            return float(rows[0][0])
+
+    return None
+
+
+def running_demand_estimate(port: str = "singapore",
+                             year: int | None = None,
+                             month: int | None = None) -> dict:
+    """
+    Returns a demand snapshot for the current (or specified) month.
+    For ports without a vessel registry, event_count / estimated_mt are 0
+    and projected_month_mt is None.
+    """
+    today = date.today()
+    year  = year  or today.year
+    month = month or today.month
+
+    days_elapsed  = today.day
+    days_in_month = calendar.monthrange(year, month)[1]
+
+    has_registry = PORTS.get(port, {}).get("has_registry", False)
+
+    event_count  = 0
+    estimated_mt = 0.0
+    open_mt      = 0.0
+
+    if has_registry:
+        rows = db.query("""
+            SELECT COUNT(*), COALESCE(SUM(estimated_mt), 0)
+            FROM bunkering_events
+            WHERE open = FALSE AND port = ?
+              AND YEAR(start_ts) = ? AND MONTH(start_ts) = ?
+        """, [port, year, month])
+        event_count  = int(rows[0][0]) if rows else 0
+        estimated_mt = float(rows[0][1]) if rows else 0.0
+
+        open_rows = db.query("""
+            SELECT id, start_ts FROM bunkering_events
+            WHERE open = TRUE AND port = ?
+              AND YEAR(start_ts) = ? AND MONTH(start_ts) = ?
+        """, [port, year, month])
+
+        from event_detector import _avg_pump_rate
+        pump_rate = _avg_pump_rate()
+        now = datetime.now(timezone.utc)
+        for _, start_ts in open_rows:
+            if start_ts:
+                start = start_ts
+                if hasattr(start, "replace"):
+                    start = start.replace(tzinfo=timezone.utc)
+                duration_min = max(1, int((now - start).total_seconds() / 60))
+                open_mt += duration_min * pump_rate
+
+    total_so_far = estimated_mt + open_mt
+    projected = (total_so_far / days_elapsed * days_in_month) if (has_registry and days_elapsed > 0 and total_so_far > 0) else None
+
+    seasonal = seasonal_avg_monthly_volume(month, port)
+
+    last_rows = db.query("""
+        SELECT month, volume_mt FROM port_bunker_sales
+        WHERE port = ? AND fuel_type = 'TOTAL'
+        ORDER BY month DESC LIMIT 1
+    """, [_db_port(port)])
+    if not last_rows and port == "singapore":
+        last_rows = db.query("""
+            SELECT month, volume_mt FROM mpa_monthly
+            WHERE fuel_type = 'TOTAL' ORDER BY month DESC LIMIT 1
+        """)
+
+    last_official_mt    = float(last_rows[0][1]) if last_rows else None
+    last_official_month = last_rows[0][0]         if last_rows else None
+
+    pct = None
+    if projected and seasonal and seasonal > 0:
+        pct = round((projected / seasonal - 1) * 100, 1)
+
+    return {
+        "port": port,
+        "has_registry": has_registry,
+        "year": year,
+        "month": month,
+        "event_count": event_count,
+        "estimated_mt": round(estimated_mt, 0),
+        "open_event_mt": round(open_mt, 0),
+        "days_elapsed": days_elapsed,
+        "days_in_month": days_in_month,
+        "projected_month_mt": round(projected, 0) if projected else None,
+        "seasonal_avg_mt": round(seasonal, 0) if seasonal else None,
+        "last_official_mt": round(last_official_mt, 0) if last_official_mt else None,
+        "last_official_month": str(last_official_month) if last_official_month else None,
+        "pct_vs_seasonal": pct,
+    }
+
+
+# ── Month-end snapshot ─────────────────────────────────────────────────────────
+
+def save_month_estimate(port: str, year: int, month: int) -> bool:
+    """
+    Snapshot the projected total for a completed month into monthly_demand_estimates.
+    Only saves if the port has a registry and the month has events.
+    Returns True if saved, False if skipped.
+    """
+    if not PORTS.get(port, {}).get("has_registry", False):
+        return False
+
+    rows = db.query("""
+        SELECT COUNT(*), COALESCE(SUM(estimated_mt), 0)
+        FROM bunkering_events
+        WHERE open = FALSE AND port = ?
+          AND YEAR(start_ts) = ? AND MONTH(start_ts) = ?
+    """, [port, year, month])
+    event_count  = int(rows[0][0]) if rows else 0
+    estimated_mt = float(rows[0][1]) if rows else 0.0
+
+    if event_count == 0:
+        return False
+
+    days_in_month = calendar.monthrange(year, month)[1]
+    projected     = estimated_mt / days_in_month * days_in_month  # full month = sum of closed events
+    seasonal      = seasonal_avg_monthly_volume(month, port)
+    pct           = round((projected / seasonal - 1) * 100, 1) if seasonal and seasonal > 0 else None
+
+    db.execute("""
+        INSERT INTO monthly_demand_estimates
+            (port, year, month, estimated_mt, event_count, pct_vs_seasonal, saved_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT (port, year, month) DO UPDATE SET
+            estimated_mt    = excluded.estimated_mt,
+            event_count     = excluded.event_count,
+            pct_vs_seasonal = excluded.pct_vs_seasonal,
+            saved_at        = excluded.saved_at
+    """, [port, year, month, round(projected, 0), event_count, pct,
+          datetime.now(timezone.utc).isoformat()])
+    return True
+
+
+def snapshot_previous_month_if_missing(port: str = "singapore") -> None:
+    """
+    Called at month rollover (1st of month). Saves last month's estimate
+    if it hasn't been saved yet. Safe to call multiple times.
+    """
+    today = date.today()
+    if today.month == 1:
+        prev_year, prev_month = today.year - 1, 12
+    else:
+        prev_year, prev_month = today.year, today.month - 1
+
+    existing = db.query("""
+        SELECT 1 FROM monthly_demand_estimates
+        WHERE port = ? AND year = ? AND month = ?
+    """, [port, prev_year, prev_month])
+
+    if not existing:
+        saved = save_month_estimate(port, prev_year, prev_month)
+        if saved:
+            from loguru import logger
+            logger.info(f"Snapshotted {port} {prev_year}-{prev_month:02d} estimate")
+
+
+# ── Charts ─────────────────────────────────────────────────────────────────────
+
+def _monthly_avg_price(port: str, grade: str = "VLSFO") -> dict[str, float]:
+    """Return {YYYY-MM: avg_price} monthly averages from S&B for a given port/grade."""
+    import sqlite3
+    from pathlib import Path
+    PORT_MAP = {
+        "singapore":  "Singapore",
+        "fujairah":   "Fujairah",
+        "rotterdam":  "Rotterdam",
+        "antwerp":    "Antwerp",
+        "panama":     "Balboa",
+        "gibraltar":  "Gibraltar",
+        "houston":    "Houston",
+        "hong_kong":  "Hong Kong",
+        "zhoushan":   "Zhoushan",
+    }
+    sb_port = PORT_MAP.get(port)
+    if not sb_port:
+        return {}
+    try:
+        conn = sqlite3.connect("/root/bunkervision/bunker_prices.db")
+        rows = conn.execute("""
+            SELECT strftime('%Y-%m', date) AS ym, AVG(price_usd)
+            FROM bunker_prices
+            WHERE source='shipandbunker' AND port_name=? AND fuel_grade=?
+            GROUP BY ym ORDER BY ym
+        """, (sb_port, grade)).fetchall()
+        conn.close()
+        return {r[0]: round(r[1], 2) for r in rows if r[1] is not None}
+    except Exception:
+        return {}
+
+
+_MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+
+
+def demand_chart_data(port: str = "singapore") -> dict:
+    """
+    Plotly figure: official bars (grey) overlaid with provisional estimates (amber)
+    + current-month forecast (green/red) + seasonal avg line.
+    """
+    import pandas as pd
+    import plotly.graph_objects as go
+
+    # Use TOTAL where available per month; fall back to summing grades when TOTAL is absent
+    # (handles cases where the source only published grade-level data, e.g. recent MPA months)
+    df = db.query_df("""
+        SELECT month,
+            COALESCE(
+                MAX(CASE WHEN fuel_type = 'TOTAL' THEN volume_mt END),
+                SUM(CASE WHEN fuel_type != 'TOTAL' THEN volume_mt END)
+            ) AS volume_mt
+        FROM port_bunker_sales
+        WHERE port = ?
+        GROUP BY month
+        HAVING volume_mt > 0
+        ORDER BY month
+    """, [_db_port(port)])
+
+    if df.empty and port == "singapore":
+        df = db.query_df("""
+            SELECT month, SUM(volume_mt) AS volume_mt
+            FROM mpa_monthly WHERE fuel_type != 'TOTAL'
+            GROUP BY month ORDER BY month
+        """)
+
+    port_cfg  = PORTS.get(port, {})
+    frequency = port_cfg.get("data_frequency", "monthly")
+
+    _BAR_W_MS = 20 * 24 * 3600 * 1000  # 20-day bar width in ms (date-axis bars need explicit width)
+
+    _LAYOUT = dict(
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(22,27,34,0.6)",
+        font=dict(family="Inter, system-ui, sans-serif", size=12, color="#c9d1d9"),
+        margin=dict(l=50, r=40, t=30, b=40),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        barmode="overlay",
+        dragmode=False,
+        yaxis=dict(title=None, ticksuffix=" Mt"),
+        xaxis=dict(type="date", tickformat="%b %Y"),
+        xaxis_title="",
+    )
+
+    fig = go.Figure(layout=_LAYOUT)
+
+    if not df.empty:
+        x_labels = [str(m)[:7] for m in df["month"]]  # YYYY-MM, consistent with provisional labels
+        fig.add_trace(go.Bar(
+            x=x_labels,
+            y=(df["volume_mt"] / 1e6).tolist(),
+            name="Official",
+            marker_color="#30363d",
+            opacity=0.9,
+            width=_BAR_W_MS,
+        ))
+
+        try:
+            if frequency == "quarterly":
+                df["qtr"] = df["month"].dt.month.apply(lambda m: (m - 1) // 3)
+                avg_by_period = df.groupby("qtr")["volume_mt"].mean()
+                avg_vals = [avg_by_period.get((pd.Timestamp(m).month - 1) // 3, None)
+                            for m in df["month"]]
+            else:
+                avg_by_month = df.groupby(df["month"].dt.month)["volume_mt"].mean()
+                avg_vals = [avg_by_month.get(m.month, None) for m in df["month"]]
+            avg_vals_mt = [v / 1e6 if v is not None else None for v in avg_vals]
+        except Exception:
+            avg_vals_mt = None
+
+    # Saved month-end estimates (amber) — shown for ALL months with estimates,
+    # overlaid on official bars so accuracy vs actual can be compared visually
+    official_months: set[str] = set(x_labels) if not df.empty else set()  # YYYY-MM format
+    est_rows = db.query("""
+        SELECT year, month, estimated_mt, pct_vs_seasonal
+        FROM monthly_demand_estimates
+        WHERE port = ?
+        ORDER BY year, month
+    """, [port])
+    if est_rows:
+        est_x, est_y, est_hover, est_bar_text = [], [], [], []
+        for yr, mo, mt, pct in est_rows:
+            label = f"{yr}-{mo:02d}"
+            est_x.append(label)
+            est_y.append(mt)
+            pct_str = f"{pct:+.1f}% vs seasonal" if pct is not None else ""
+            month_name = f"{_MONTH_NAMES[mo - 1]} {yr}"
+            est_hover.append(
+                f"<b>{month_name}</b><br>Provisional: {mt/1e6:.2f} Mt"
+                + (f"<br>{pct_str}" if pct_str else "")
+            )
+            # Only show on-bar text for months without official (avoids crowding the overlay)
+            est_bar_text.append(
+                f"{mt/1e6:.2f} Mt" + (f"<br>{pct_str}" if pct_str else "")
+                if label not in official_months else ""
+            )
+        if est_x:
+            fig.add_trace(go.Bar(
+                x=est_x,
+                y=[v / 1e6 for v in est_y],
+                name="Provisional",
+                marker_color="#e3b341",
+                opacity=0.75,
+                width=_BAR_W_MS,
+                text=est_bar_text,
+                textposition="outside",
+                hovertemplate="%{customdata}<extra></extra>",
+                customdata=est_hover,
+            ))
+
+    # Current-month live forecast (green/red)
+    has_registry = port_cfg.get("has_registry", False)
+    if has_registry:
+        est = running_demand_estimate(port)
+        if est.get("projected_month_mt"):
+            today     = date.today()
+            cur_label = today.strftime("%Y-%m")
+            colour    = "#3fb950" if (est.get("pct_vs_seasonal") or 0) >= 0 else "#f85149"
+            pct_str   = f"{est['pct_vs_seasonal']:+.1f}% vs seasonal" if est.get("pct_vs_seasonal") is not None else ""
+            month_name = today.strftime("%b %Y")
+            hover_text = (
+                f"<b>{month_name}</b><br>Forecast: {est['projected_month_mt']/1e6:.2f} Mt"
+                + (f"<br>{pct_str}" if pct_str else "")
+            )
+            bar_text = f"{est['projected_month_mt']/1e6:.2f} Mt" + (f"<br>{pct_str}" if pct_str else "")
+            fig.add_trace(go.Bar(
+                x=[cur_label],
+                y=[est["projected_month_mt"] / 1e6],
+                name="Forecast",
+                marker_color=colour,
+                opacity=0.9,
+                width=_BAR_W_MS,
+                text=[bar_text],
+                textposition="outside",
+                hovertemplate="%{customdata}<extra></extra>",
+                customdata=[hover_text],
+            ))
+
+    if not df.empty and avg_vals_mt is not None:
+        fig.add_trace(go.Scatter(
+            x=x_labels,
+            y=avg_vals_mt,
+            name="Seasonal Avg",
+            mode="lines",
+            line=dict(color="#58a6ff", width=1, dash="dot"),
+        ))
+
+    return fig.to_dict()
+
+
+def fuel_split_chart_data(port: str = "singapore") -> dict:
+    """
+    Plotly stacked bar: official MPA fuel-type breakdown per month.
+    Grades: VLSFO / HSFO / LSMGO / MGO / other.
+    """
+    import plotly.graph_objects as go
+
+    GRADE_COLOURS = {
+        "VLSFO":    "#58a6ff",
+        "HSFO":     "#f85149",
+        "LSMGO":    "#3fb950",
+        "MGO":      "#e3b341",
+        "LNG":      "#a371f7",
+        "Methanol": "#79c0ff",
+        "Ammonia":  "#56d364",
+    }
+    GRADE_ORDER = ["VLSFO", "HSFO", "LSMGO", "MGO", "LNG", "Methanol", "Ammonia"]
+
+    df = db.query_df("""
+        SELECT month, fuel_type, volume_mt
+        FROM port_bunker_sales
+        WHERE port = ? AND fuel_type != 'TOTAL'
+        ORDER BY month, fuel_type
+    """, [_db_port(port)])
+
+    if df.empty and port == "singapore":
+        df = db.query_df("""
+            SELECT month, fuel_type, volume_mt
+            FROM mpa_monthly
+            WHERE fuel_type != 'TOTAL'
+            ORDER BY month, fuel_type
+        """)
+
+    _LAYOUT = dict(
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(22,27,34,0.6)",
+        font=dict(family="Inter, system-ui, sans-serif", size=12, color="#c9d1d9"),
+        margin=dict(l=60, r=20, t=30, b=40),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        barmode="stack",
+        yaxis_title="Volume (mt)",
+        xaxis_title="",
+    )
+
+    fig = go.Figure(layout=_LAYOUT)
+
+    if df.empty:
+        return fig.to_dict()
+
+    x_all    = sorted(df["month"].astype(str).unique().tolist())
+    grades   = [g for g in GRADE_ORDER if g in df["fuel_type"].values]
+    others   = [g for g in df["fuel_type"].unique() if g not in GRADE_ORDER]
+
+    for grade in grades + others:
+        sub = df[df["fuel_type"] == grade]
+        grade_map = dict(zip(sub["month"].astype(str), sub["volume_mt"]))
+        fig.add_trace(go.Bar(
+            x=x_all,
+            y=[grade_map.get(x, 0) for x in x_all],
+            name=grade,
+            marker_color=GRADE_COLOURS.get(grade, "#8b949e"),
+        ))
+
+    return fig.to_dict()

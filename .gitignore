@@ -1,0 +1,14 @@
+# Secrets
+.env
+# Databases / WAL
+*.db
+*.db.wal
+*.wal
+prices.db
+# Certs
+data/*.pem
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/

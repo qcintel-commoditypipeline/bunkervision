@@ -1,0 +1,196 @@
+/* ── Base ───────────────────────────────────────────────────────────────────── */
+:root {
+  --bg:       #0d1117;
+  --surface:  #161b22;
+  --border:   #30363d;
+  --text:     #e6edf3;
+  --muted:    #8b949e;
+  --accent:   #58a6ff;
+  --pos:      #3fb950;
+  --neg:      #f85149;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+/* ── Navbar ─────────────────────────────────────────────────────────────────── */
+.navbar {
+  background: var(--surface) !important;
+  border-bottom: 1px solid var(--border);
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+.navbar-brand {
+  font-weight: 600;
+  color: var(--text) !important;
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+}
+.nav-link {
+  color: var(--muted) !important;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.75rem !important;
+  border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+}
+.nav-link:hover  { color: var(--text) !important; background: rgba(255,255,255,0.05); }
+.nav-link.active { color: var(--text) !important; background: rgba(88,166,255,0.1); }
+
+/* ── Cards ──────────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.card-body { padding: 1rem; }
+
+/* ── KPI cards ──────────────────────────────────────────────────────────────── */
+.kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  height: 100%;
+  transition: border-color 0.2s;
+}
+.kpi-card.kpi-accent-pos { border-left: 3px solid var(--pos); }
+.kpi-card.kpi-accent-neg { border-left: 3px solid var(--neg); }
+.kpi-label {
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.3rem;
+}
+.kpi-val {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kpi-sub {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-top: 0.15rem;
+}
+
+/* ── Chart loading ──────────────────────────────────────────────────────────── */
+.chart-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  gap: 0.5rem;
+}
+.chart-loading::before {
+  content: "";
+  width: 18px; height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Tables ─────────────────────────────────────────────────────────────────── */
+.table { color: var(--text); }
+.table-dark { --bs-table-bg: transparent; --bs-table-hover-bg: rgba(255,255,255,0.03); }
+.table thead th {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid var(--border) !important;
+  padding: 0.6rem 0.75rem;
+  white-space: nowrap;
+}
+.table tbody td {
+  font-size: 0.85rem;
+  border-color: rgba(48,54,61,0.5) !important;
+  padding: 0.45rem 0.75rem;
+  vertical-align: middle;
+}
+
+/* ── DataTables ─────────────────────────────────────────────────────────────── */
+.dataTables_wrapper .dataTables_filter label { color: var(--muted); font-size: 0.82rem; }
+.dataTables_wrapper .dataTables_filter input {
+  background: #21262d;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.82rem;
+  margin-left: 0.4rem;
+  outline: none;
+}
+.dataTables_wrapper .dataTables_filter input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(88,166,255,0.12);
+}
+.dataTables_wrapper .dataTables_info,
+.dataTables_wrapper .dataTables_length label,
+.dataTables_wrapper .dataTables_paginate { color: var(--muted); font-size: 0.78rem; }
+.dataTables_wrapper .dataTables_paginate .paginate_button {
+  color: var(--muted) !important;
+  border-radius: 4px !important;
+}
+.dataTables_wrapper .dataTables_paginate .paginate_button.current {
+  background: rgba(88,166,255,0.12) !important;
+  color: var(--accent) !important;
+  border-color: transparent !important;
+}
+table.dataTable thead th { cursor: pointer; }
+
+/* ── Page header ────────────────────────────────────────────────────────────── */
+.page-header { margin-bottom: 1rem; }
+.page-header h5 { font-weight: 600; margin-bottom: 0.1rem; }
+.page-header .subtitle { font-size: 0.78rem; color: var(--muted); }
+
+/* ── Section label ──────────────────────────────────────────────────────────── */
+.section-label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.5rem;
+  display: block;
+}
+
+/* ── MapLibre overrides ─────────────────────────────────────────────────────── */
+.maplibregl-popup-content {
+  background: var(--surface) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 6px !important;
+  padding: 10px 14px !important;
+  font-size: 0.8rem !important;
+  font-family: Inter, system-ui, sans-serif !important;
+}
+.maplibregl-popup-tip { display: none !important; }
+.maplibregl-popup-close-button { color: var(--muted) !important; }
+.maplibregl-ctrl-group {
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+}
+.maplibregl-ctrl-group button { color: var(--text) !important; }
+
+/* ── Vessel popup ───────────────────────────────────────────────────────────── */
+.vessel-popup-name { font-weight: 600; font-size: 0.88rem; margin-bottom: 4px; }
+.vessel-popup-row  { color: var(--muted); font-size: 0.78rem; line-height: 1.6; }
+.vessel-popup-row span { color: var(--text); }
+
+/* ── Form controls ──────────────────────────────────────────────────────────── */
+.btn-outline-secondary {
+  border-color: var(--border);
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.btn-outline-secondary:hover { border-color: var(--accent); color: var(--text); }
