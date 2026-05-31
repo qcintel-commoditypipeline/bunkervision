@@ -302,6 +302,13 @@ def demand_chart_data(port: str = "singapore") -> dict:
     port_cfg  = PORTS.get(port, {})
     frequency = port_cfg.get("data_frequency", "monthly")
 
+    # Headline focuses on the recent window so bars stay legible — the full
+    # multi-year history crammed onto a phone-width chart is what made it
+    # unreadable. ~3y of months / ~4y of quarters.
+    if not df.empty:
+        _window = 16 if frequency == "quarterly" else 36
+        df = df.tail(_window).reset_index(drop=True)
+
     _BAR_W_MS = 20 * 24 * 3600 * 1000  # 20-day bar width in ms (date-axis bars need explicit width)
 
     _LAYOUT = dict(
@@ -309,12 +316,14 @@ def demand_chart_data(port: str = "singapore") -> dict:
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(22,27,34,0.6)",
         font=dict(family="Inter, system-ui, sans-serif", size=12, color="#c9d1d9"),
-        margin=dict(l=50, r=40, t=30, b=40),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        margin=dict(l=64, r=18, t=24, b=54),
+        legend=dict(orientation="h", yanchor="bottom", y=1.04, x=0),
         barmode="overlay",
         dragmode=False,
-        yaxis=dict(title=None, ticksuffix=" Mt", hoverformat=".2f"),
-        xaxis=dict(type="date", tickformat="%b %Y"),
+        yaxis=dict(title=None, ticksuffix=" Mt", hoverformat=".2f",
+                   automargin=True, gridcolor="rgba(240,246,252,0.05)", zeroline=False),
+        xaxis=dict(type="date", tickformat="%b %Y", automargin=True,
+                   gridcolor="rgba(0,0,0,0)"),
         xaxis_title="",
     )
 
@@ -462,10 +471,12 @@ def fuel_split_chart_data(port: str = "singapore") -> dict:
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(22,27,34,0.6)",
         font=dict(family="Inter, system-ui, sans-serif", size=12, color="#c9d1d9"),
-        margin=dict(l=60, r=20, t=30, b=40),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        margin=dict(l=64, r=18, t=24, b=54),
+        legend=dict(orientation="h", yanchor="bottom", y=1.04, x=0),
         barmode="stack",
-        yaxis=dict(title="Volume (mt)", hoverformat=",.0f"),
+        yaxis=dict(title="Volume (mt)", hoverformat=",.0f",
+                   automargin=True, gridcolor="rgba(240,246,252,0.05)", zeroline=False),
+        xaxis=dict(automargin=True),
         xaxis_title="",
     )
 
@@ -475,6 +486,8 @@ def fuel_split_chart_data(port: str = "singapore") -> dict:
         return fig.to_dict()
 
     x_all    = sorted(df["month"].astype(str).unique().tolist())
+    freq     = PORTS.get(port, {}).get("data_frequency", "monthly")
+    x_all    = x_all[-(16 if freq == "quarterly" else 36):]   # recent window only
     grades   = [g for g in GRADE_ORDER if g in df["fuel_type"].values]
     others   = [g for g in df["fuel_type"].unique() if g not in GRADE_ORDER]
 

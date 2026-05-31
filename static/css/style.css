@@ -362,14 +362,14 @@ input:focus-visible, select:focus-visible,
   border-radius: var(--r-lg);
   box-shadow: none;
 }
-.card-body { padding: var(--s5); }
+.card-body { padding: var(--s4); }
 
 /* ── Stat grid utility — Bootstrap-free responsive card layout ────────────────── */
 /* Drop KPI/stat cards straight in; auto-fits columns and reflows on mobile. */
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: var(--s4);
+  gap: var(--s3);
 }
 
 /* Headline hero + KPI layout.
@@ -378,7 +378,7 @@ input:focus-visible, select:focus-visible,
 .headline-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--s4);
+  gap: var(--s3);
 }
 .headline-grid > .hero-card { grid-column: 1 / -1; }
 
@@ -387,7 +387,7 @@ input:focus-visible, select:focus-visible,
   background: var(--surface);
   border: none;
   border-radius: var(--r-md);
-  padding: var(--s4) var(--s5);
+  padding: var(--s3) var(--s4);
   height: 100%;
   box-shadow: none;
 }
@@ -425,7 +425,7 @@ input:focus-visible, select:focus-visible,
     linear-gradient(180deg, var(--surface-2), var(--surface));
   border: none;
   border-radius: var(--r-lg);
-  padding: var(--s5) var(--s5);
+  padding: var(--s4) var(--s5);
   height: 100%;
   box-shadow: none;
 }
