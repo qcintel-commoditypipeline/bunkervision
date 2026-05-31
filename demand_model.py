@@ -347,6 +347,7 @@ def demand_chart_data(port: str = "singapore", window: str = "3y") -> dict:
             marker_color="#30363d",
             opacity=0.9,
             width=_BAR_W_MS,
+            hovertemplate="<b>%{x|%b %Y}</b><br>Official: %{y:.2f} Mt<extra></extra>",
         ))
 
         try:
@@ -437,6 +438,7 @@ def demand_chart_data(port: str = "singapore", window: str = "3y") -> dict:
             name="Seasonal Avg",
             mode="lines",
             line=dict(color="#58a6ff", width=1, dash="dot"),
+            hovertemplate="<b>%{x|%b %Y}</b><br>Seasonal avg: %{y:.2f} Mt<extra></extra>",
         ))
 
     return fig.to_dict()
@@ -544,9 +546,10 @@ def fuel_split_chart_data(port: str = "singapore", window: str = "3y") -> dict:
         margin=dict(l=64, r=18, t=24, b=54),
         legend=dict(orientation="h", yanchor="bottom", y=1.04, x=0),
         barmode="stack",
-        yaxis=dict(title="Volume (mt)", hoverformat=",.0f",
+        yaxis=dict(title=None, ticksuffix=" Mt", hoverformat=".2f",
                    automargin=True, gridcolor="rgba(240,246,252,0.05)", zeroline=False),
-        xaxis=dict(automargin=True),
+        xaxis=dict(type="date", tickformat="%b %Y", automargin=True,
+                   gridcolor="rgba(0,0,0,0)"),
         xaxis_title="",
     )
 
@@ -555,16 +558,16 @@ def fuel_split_chart_data(port: str = "singapore", window: str = "3y") -> dict:
     if df.empty:
         return fig.to_dict()
 
-    x_all    = sorted(df["month"].astype(str).unique().tolist())
+    months   = sorted(df["month"].astype(str).unique().tolist())
     freq     = PORTS.get(port, {}).get("data_frequency", "monthly")
     _n       = _window_periods(window, freq)
     if _n:
-        x_all = x_all[-_n:]                                   # recent window only
+        months = months[-_n:]                                 # recent window only
 
     # Significance test over the visible window: drop grades contributing
     # <0.5% so the legend isn't cluttered with flat-zero series (e.g. Ammonia,
     # Methanol, LNG in Singapore).
-    win_set   = set(x_all)
+    win_set   = set(months)
     dfw       = df[df["month"].astype(str).isin(win_set)]
     grade_tot = dfw.groupby("fuel_type")["volume_mt"].sum()
     total_all = float(grade_tot.sum()) or 1.0
@@ -573,14 +576,18 @@ def fuel_split_chart_data(port: str = "singapore", window: str = "3y") -> dict:
     grades   = [g for g in GRADE_ORDER if g in keep]
     others   = [g for g in df["fuel_type"].unique() if g not in GRADE_ORDER and g in keep]
 
+    # x as YYYY-MM (date-parsed) + values in Mt — identical units/format to the
+    # demand chart so the two never disagree.
+    x_all = [m[:7] for m in months]
     for grade in grades + others:
         sub = df[df["fuel_type"] == grade]
-        grade_map = dict(zip(sub["month"].astype(str), sub["volume_mt"]))
+        grade_map = dict(zip(sub["month"].astype(str).str[:7], sub["volume_mt"] / 1e6))
         fig.add_trace(go.Bar(
             x=x_all,
-            y=[grade_map.get(x, 0) for x in x_all],
+            y=[grade_map.get(m[:7], 0) for m in months],
             name=grade,
             marker_color=GRADE_COLOURS.get(grade, "#8b949e"),
+            hovertemplate="<b>%{x|%b %Y}</b><br>" + grade + ": %{y:.2f} Mt<extra></extra>",
         ))
 
     return fig.to_dict()
