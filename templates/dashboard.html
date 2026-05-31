@@ -388,11 +388,17 @@ async function refreshEventFeed() {
 }
 
 // ── Charts ─────────────────────────────────────────────────────────────────────
-let chartWindow = '3y';
+// Window choice persists across reloads / port switches.
+let chartWindow = localStorage.getItem('bv_chart_window') || '3y';
 function loadDemandCharts() {
   loadChart('demand-chart', `/api/demand_chart?port=${CURRENT_PORT}&window=${chartWindow}`);
   loadChart('fuel-split-chart', `/api/fuel_split_chart?port=${CURRENT_PORT}&window=${chartWindow}`);
 }
+function syncWindowButtons() {
+  document.querySelectorAll('#demand-window .seg-btn')
+    .forEach(b => b.classList.toggle('seg-active', b.dataset.window === chartWindow));
+}
+syncWindowButtons();              // reflect the persisted choice in the toggle
 loadDemandCharts();
 loadChart('hero-spark', `/api/demand_spark?port=${CURRENT_PORT}`);
 
@@ -400,8 +406,8 @@ loadChart('hero-spark', `/api/demand_spark?port=${CURRENT_PORT}`);
 document.querySelectorAll('#demand-window .seg-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     chartWindow = btn.dataset.window;
-    document.querySelectorAll('#demand-window .seg-btn')
-      .forEach(b => b.classList.toggle('seg-active', b === btn));
+    localStorage.setItem('bv_chart_window', chartWindow);
+    syncWindowButtons();
     loadDemandCharts();
   });
 });
