@@ -1214,12 +1214,19 @@ def start_background() -> None:
         lambda: [demand_model.snapshot_previous_month_if_missing(p) for p in PORTS],
         "cron", day=1, hour=6, minute=0,
     )
+    # Re-snapshot still-provisional months daily so the amber bar tracks
+    # late-closing events until the official figure is published (then frozen).
+    sched.add_job(
+        lambda: [demand_model.refresh_provisional_estimates(p) for p in PORTS],
+        "cron", hour=2, minute=30,
+    )
     sched.start()
 
     # Also run on startup in case the server was down over a month boundary
     for _p in PORTS:
         try:
             demand_model.snapshot_previous_month_if_missing(_p)
+            demand_model.refresh_provisional_estimates(_p)
         except Exception:
             pass
 

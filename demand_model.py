@@ -232,6 +232,42 @@ def snapshot_previous_month_if_missing(port: str = "singapore") -> None:
             logger.info(f"Snapshotted {port} {prev_year}-{prev_month:02d} estimate")
 
 
+def _official_published(port: str, year: int, month: int) -> bool:
+    """True once the port authority has published the official TOTAL for the
+    month — at which point the provisional estimate is frozen for grading."""
+    from accuracy import _official_total
+    official = _official_total(port, year, month)
+    return official is not None and official > 0
+
+
+def refresh_provisional_estimates(port: str = "singapore") -> int:
+    """Re-snapshot saved months that are still PROVISIONAL (no official figure
+    published yet), so the amber 'Provisional' bar tracks late-closing events
+    instead of freezing at its month-rollover value.
+
+    Events keep closing — and AIS keeps back-filling — for weeks after a month
+    ends, so a once-only snapshot reads systematically low (e.g. April 2026 was
+    frozen ~15% under its later closed total). Once the authority publishes
+    the official month, that month is left untouched and graded against it.
+
+    Returns the number of months refreshed. Safe to call repeatedly.
+    """
+    rows = db.query("""
+        SELECT year, month FROM monthly_demand_estimates
+        WHERE port = ? ORDER BY year, month
+    """, [port])
+    refreshed = 0
+    for yr, mo in rows:
+        if _official_published(port, int(yr), int(mo)):
+            continue  # official is in — freeze the provisional for grading
+        if save_month_estimate(port, int(yr), int(mo)):
+            refreshed += 1
+    if refreshed:
+        from loguru import logger
+        logger.info(f"Refreshed {refreshed} provisional estimate(s) for {port}")
+    return refreshed
+
+
 # ── Charts ─────────────────────────────────────────────────────────────────────
 
 def _monthly_avg_price(port: str, grade: str = "VLSFO") -> dict[str, float]:
