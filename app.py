@@ -5,27 +5,73 @@ Run:  python app.py
 from __future__ import annotations
 
 import concurrent.futures
+import hmac
 import json
 import re
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import requests as _requests
 
 from flask import Flask, Response, jsonify, render_template, request, stream_with_context
+from loguru import logger
 
 import db
 import demand_model
 import prices_data
 from ais_client import get_live_positions, position_queue, start_ais_thread
-from config import DEBUG, FLASK_SECRET, HOST, MAP_CENTRE, MAPBOX_TOKEN, PORT, PORTS
+from config import ADMIN_TOKEN, DEBUG, FLASK_SECRET, HOST, MAP_CENTRE, MAPBOX_TOKEN, PORT, PORTS
 from event_detector import start_detector_thread
 from mpa_scraper import load_all_port_stats, seed_vessels_from_json
 
 app = Flask(__name__)
 app.secret_key = FLASK_SECRET
+
+
+# ── Admin auth ─────────────────────────────────────────────────────────────────
+# Shared-token gate for the admin page and every mutating endpoint. The token is
+# supplied via the `X-Admin-Token` header or a `?token=` query parameter.
+# If ADMIN_TOKEN is not configured, protected endpoints FAIL CLOSED (503) rather
+# than running unauthenticated. Read-only GET endpoints and the public dashboard
+# stay open.
+
+# Paths protected regardless of HTTP method (in addition to every POST route).
+_PROTECTED_PATHS = {
+    "/admin",
+    "/api/registry/remove",
+    "/api/registry/add",
+    "/api/registry/operators",
+    "/api/refresh_port_stats",
+    "/api/registry/global_bunkering_scan",
+    "/api/registry/vf_check",
+}
+
+
+def _is_protected_request() -> bool:
+    if request.method == "POST":
+        return True
+    return request.path in _PROTECTED_PATHS
+
+
+@app.before_request
+def _require_admin_token():
+    if not _is_protected_request():
+        return None
+    if not ADMIN_TOKEN:
+        return jsonify({
+            "error": "admin endpoints disabled: ADMIN_TOKEN is not set on the server. "
+                     "Set the ADMIN_TOKEN environment variable and restart to enable "
+                     "the admin page and mutating endpoints (fail-closed by design)."
+        }), 503
+    supplied = request.headers.get("X-Admin-Token") or request.args.get("token") or ""
+    if not hmac.compare_digest(supplied, ADMIN_TOKEN):
+        return jsonify({
+            "error": "unauthorized: supply the admin token via the X-Admin-Token "
+                     "header or ?token= query parameter"
+        }), 401
+    return None
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
@@ -907,9 +953,11 @@ def api_global_bunkering_scan():
                     "completed_at": datetime.now(timezone.utc).isoformat(),
                 })
         except Exception as exc:
-            logger.error(f"Global bunkering scan failed: {exc}")
+            # Reset the scan state FIRST so a failure can never leave status
+            # stuck at "running" (which would 409 every future scan forever).
             with _global_scan_lock:
                 _global_scan_state.update({"status": "error", "error": str(exc)})
+            logger.error(f"Global bunkering scan failed: {exc}")
 
     threading.Thread(target=_run, daemon=True).start()
     return jsonify({"status": "started", "dry_run": dry_run, "cat_codes": cat_codes})

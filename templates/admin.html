@@ -297,6 +297,23 @@
 
 {% block scripts %}
 <script>
+// ── Admin token forwarding ────────────────────────────────────────────────────
+// The server requires X-Admin-Token (or ?token=) on /admin and every mutating
+// endpoint. Open this page as /admin?token=YOUR_TOKEN and the token is attached
+// to every API call made from here.
+const _ADMIN_TOKEN = new URLSearchParams(location.search).get('token') || '';
+if (_ADMIN_TOKEN) {
+  const _origFetch = window.fetch.bind(window);
+  window.fetch = (url, opts = {}) => {
+    opts.headers = Object.assign({}, opts.headers, { 'X-Admin-Token': _ADMIN_TOKEN });
+    return _origFetch(url, opts);
+  };
+}
+
+// NOTE: escapeHtml() (defined in base.html) MUST wrap every AIS / Equasis /
+// VesselFinder-derived string interpolated into innerHTML below — vessel names
+// are attacker-controlled broadcast data (stored XSS vector).
+
 // ── Registry: search + port filter ────────────────────────────────────────────
 let regPortFilter = '';
 
@@ -367,7 +384,7 @@ document.getElementById('refresh-btn').addEventListener('click', async function(
 let _loadedCandidates = [];
 
 function aisBadge(confidence, type_code) {
-  if (confidence === 'high')   return `<span class="badge" style="background:#1a3a1a;color:#56d364;">Tanker · AIS ${type_code}</span>`;
+  if (confidence === 'high')   return `<span class="badge" style="background:#1a3a1a;color:#56d364;">Tanker · AIS ${escapeHtml(type_code)}</span>`;
   if (confidence === 'medium') return `<span class="badge" style="background:#2d2000;color:#e3b341;">Small draught</span>`;
   return `<span class="badge" style="background:#21262d;color:#8b949e;">Unknown</span>`;
 }
@@ -383,7 +400,7 @@ function vfBadge(info) {
     unknown:    'background:#21262d;color:#6e7681;',
   };
   const s = styles[info.level] || styles.unknown;
-  return `<span class="vf-cell badge" style="${s}" title="${info.type}">${info.label}</span>`;
+  return `<span class="vf-cell badge" style="${s}" title="${escapeHtml(info.type)}">${escapeHtml(info.label)}</span>`;
 }
 
 document.getElementById('discover-btn').addEventListener('click', loadCandidates);
@@ -419,26 +436,28 @@ async function loadCandidates() {
     }
 
     tbody.innerHTML = candidates.map(c => {
-      const safeName    = (c.name || '—').replace(/[<>"]/g, '');
+      const safeName    = escapeHtml(c.name || '—');
+      const safeMmsi    = escapeHtml(c.mmsi || '');
+      const safeImo     = escapeHtml(c.imo || '');
       const nameCell    = c.mmsi
-        ? `<a href="https://www.vesselfinder.com/vessels/details/${c.mmsi}" target="_blank"
+        ? `<a href="https://www.vesselfinder.com/vessels/details/${encodeURIComponent(c.mmsi)}" target="_blank"
               style="color:#e6edf3;text-decoration:none;" title="Open on VesselFinder"
               >${safeName} <span style="color:#58a6ff;font-size:0.75em;">↗</span></a>`
         : safeName;
       const draught     = c.draught != null ? parseFloat(c.draught).toFixed(1) : '—';
       const sog         = c.sog     != null ? parseFloat(c.sog).toFixed(1)     : '—';
-      const safeNameAttr = (c.name || '').replace(/"/g, '&quot;');
-      return `<tr data-mmsi="${c.mmsi || ''}">
+      const safeNameAttr = escapeHtml(c.name || '');
+      return `<tr data-mmsi="${safeMmsi}">
         <td class="fw-medium">${nameCell}</td>
-        <td class="text-muted" style="font-size:0.8rem;font-family:monospace;">${c.mmsi || '—'}</td>
-        <td class="text-muted" style="font-size:0.8rem;font-family:monospace;">${c.imo  || '—'}</td>
+        <td class="text-muted" style="font-size:0.8rem;font-family:monospace;">${safeMmsi || '—'}</td>
+        <td class="text-muted" style="font-size:0.8rem;font-family:monospace;">${safeImo  || '—'}</td>
         <td>${aisBadge(c.confidence, c.type_code)}</td>
         <td class="vf-type-cell">—</td>
         <td>${draught}</td>
         <td>${sog}</td>
         <td class="text-end">
           <button class="btn btn-sm add-candidate py-0 px-2"
-                  data-mmsi="${c.mmsi || ''}" data-imo="${c.imo || ''}"
+                  data-mmsi="${safeMmsi}" data-imo="${safeImo}"
                   data-name="${safeNameAttr}" data-port="${port}"
                   style="font-size:0.75rem;color:#3fb950;border:1px solid #1f3d1f;background:transparent;">
             + Add
@@ -540,15 +559,16 @@ function bindAddButtons() {
 // ── Equasis ───────────────────────────────────────────────────────────────────
 function eqTypeBadge(ship_type) {
   const st = (ship_type || '').toLowerCase();
+  const safe = escapeHtml(ship_type);
   if (st.includes('bunker'))
-    return `<span class="badge" style="background:#1a3a1a;color:#56d364;">${ship_type}</span>`;
+    return `<span class="badge" style="background:#1a3a1a;color:#56d364;">${safe}</span>`;
   if (st.includes('oil products') || st === 'oil tanker')
-    return `<span class="badge" style="background:#2d2000;color:#e3b341;">${ship_type}</span>`;
+    return `<span class="badge" style="background:#2d2000;color:#e3b341;">${safe}</span>`;
   if (st.includes('tanker'))
-    return `<span class="badge" style="background:#21262d;color:#8b9db3;">${ship_type}</span>`;
+    return `<span class="badge" style="background:#21262d;color:#8b9db3;">${safe}</span>`;
   if (!ship_type)
     return `<span class="text-muted">—</span>`;
-  return `<span class="badge" style="background:#21262d;color:#6e7681;">${ship_type}</span>`;
+  return `<span class="badge" style="background:#21262d;color:#6e7681;">${safe}</span>`;
 }
 
 async function eqAddVessel(imo, name, port, btn) {
@@ -596,7 +616,7 @@ async function runEqScan() {
 
     if (res.error) {
       status.textContent = res.error;
-      tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger py-3">${res.error}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger py-3">${escapeHtml(res.error)}</td></tr>`;
       return;
     }
 
@@ -611,7 +631,8 @@ async function runEqScan() {
     }
 
     tbody.innerHTML = results.map(r => {
-      const safeName = (r.name || '—').replace(/[<>"]/g, '');
+      const safeName = escapeHtml(r.name || '—');
+      const safeImo  = escapeHtml(r.imo);
       const rowBg = r.auto_added          ? 'rgba(26,58,26,0.35)' :
                     r.confidence === 'likely'   ? 'rgba(30,51,20,0.2)'  :
                     r.confidence === 'possible' ? 'rgba(40,40,10,0.2)'  : '';
@@ -620,20 +641,20 @@ async function runEqScan() {
       if (r.auto_added) {
         action = `<span style="color:#56d364;font-size:0.75rem;">✓ Auto-added</span>`;
       } else if (r.confidence === 'not_tanker' || r.confidence === 'unknown') {
-        action = `<span class="text-muted" style="font-size:0.75rem;">${r.confidence}</span>`;
+        action = `<span class="text-muted" style="font-size:0.75rem;">${escapeHtml(r.confidence)}</span>`;
       } else {
         action = `<button class="btn btn-sm eq-scan-add-btn py-0 px-2"
-                          data-imo="${r.imo}" data-name="${safeName}" data-port="${port}"
+                          data-imo="${safeImo}" data-name="${safeName}" data-port="${port}"
                           style="font-size:0.75rem;color:#3fb950;border:1px solid #1f3d1f;background:transparent;">
                     + Add
                   </button>`;
       }
       return `<tr style="background:${rowBg}">
         <td class="fw-medium">${safeName}</td>
-        <td class="text-muted" style="font-size:0.8rem;font-family:monospace;">${r.imo}</td>
-        <td class="text-muted" style="font-size:0.8rem;font-family:monospace;">${r.mmsi}</td>
+        <td class="text-muted" style="font-size:0.8rem;font-family:monospace;">${safeImo}</td>
+        <td class="text-muted" style="font-size:0.8rem;font-family:monospace;">${escapeHtml(r.mmsi)}</td>
         <td>${eqTypeBadge(r.ship_type)}</td>
-        <td class="text-muted" style="font-size:0.82rem;">${r.flag || '—'}</td>
+        <td class="text-muted" style="font-size:0.82rem;">${escapeHtml(r.flag) || '—'}</td>
         <td class="text-muted" style="font-size:0.82rem;">${r.gt ? r.gt.toLocaleString() : '—'}</td>
         <td class="text-muted" style="font-size:0.82rem;">${sogFmt}</td>
         <td class="text-end">${action}</td>
@@ -683,19 +704,20 @@ async function runEqSearch() {
 
     if (results.error) {
       status.textContent = results.error;
-      tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-3">${results.error}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-3">${escapeHtml(results.error)}</td></tr>`;
       return;
     }
 
     status.textContent = `${results.length} result${results.length !== 1 ? 's' : ''}`;
 
     if (!results.length) {
-      tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">No vessels found for "${term}"</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">No vessels found for "${escapeHtml(term)}"</td></tr>`;
       return;
     }
 
     tbody.innerHTML = results.map(r => {
-      const safeName = (r.name || '—').replace(/[<>"]/g, '');
+      const safeName = escapeHtml(r.name || '—');
+      const safeImo  = escapeHtml(r.imo);
       const inAis = r.in_ais
         ? `<span style="color:#3fb950;font-size:0.78rem;">● Live</span>`
         : `<span class="text-muted" style="font-size:0.78rem;">—</span>`;
@@ -704,17 +726,17 @@ async function runEqSearch() {
       const addBtn = r.in_registry
         ? `<span style="color:#8b949e;font-size:0.75rem;">In registry</span>`
         : `<button class="btn btn-sm eq-add-btn py-0 px-2"
-                   data-imo="${r.imo}" data-name="${safeName}" data-port="${port}"
+                   data-imo="${safeImo}" data-name="${safeName}" data-port="${port}"
                    style="font-size:0.75rem;color:#3fb950;border:1px solid #1f3d1f;background:transparent;">
              + Add
            </button>`;
       return `<tr style="background:${rowBg}">
         <td class="fw-medium">${safeName}</td>
-        <td class="text-muted" style="font-size:0.8rem;font-family:monospace;">${r.imo}</td>
+        <td class="text-muted" style="font-size:0.8rem;font-family:monospace;">${safeImo}</td>
         <td>${eqTypeBadge(r.ship_type)}</td>
-        <td class="text-muted" style="font-size:0.82rem;">${r.flag || '—'}</td>
+        <td class="text-muted" style="font-size:0.82rem;">${escapeHtml(r.flag) || '—'}</td>
         <td class="text-muted" style="font-size:0.82rem;">${r.gt ? r.gt.toLocaleString() : '—'}</td>
-        <td class="text-muted" style="font-size:0.82rem;">${r.year || '—'}</td>
+        <td class="text-muted" style="font-size:0.82rem;">${escapeHtml(r.year) || '—'}</td>
         <td>${inAis}</td>
         <td class="text-end">${addBtn}</td>
       </tr>`;
@@ -751,7 +773,7 @@ function renderOperatorList() {
   el.innerHTML = _operators.map((op, i) => `
     <div class="d-flex align-items-center gap-1 px-2 py-1 rounded"
          style="background:#161b22;border:1px solid #30363d;font-size:0.82rem;">
-      <span style="color:#e6edf3;">${op}</span>
+      <span style="color:#e6edf3;">${escapeHtml(op)}</span>
       <button class="btn btn-link btn-sm p-0 ms-2 text-danger op-remove-btn"
               data-idx="${i}" style="font-size:0.75rem;line-height:1;">✕</button>
     </div>
@@ -812,16 +834,16 @@ document.getElementById('op-scan-btn').addEventListener('click', async () => {
     } else {
       tbody.innerHTML = data.results.map(r => {
         const badge = r.added
-          ? `<span class="badge bg-success">Added → ${r.ports.join(', ')}</span>`
+          ? `<span class="badge bg-success">Added → ${escapeHtml(r.ports.join(', '))}</span>`
           : r.ports && r.ports.length === 0
             ? `<span class="badge bg-secondary">No AIS sighting</span>`
             : `<span class="badge bg-secondary">Already registered</span>`;
         return `<tr>
-          <td>${r.operator}</td>
-          <td>${r.name}</td>
-          <td>${r.imo}</td>
-          <td style="color:#3fb950;">${r.ship_type}</td>
-          <td>${(r.ports||[]).join(', ') || '—'}</td>
+          <td>${escapeHtml(r.operator)}</td>
+          <td>${escapeHtml(r.name)}</td>
+          <td>${escapeHtml(r.imo)}</td>
+          <td style="color:#3fb950;">${escapeHtml(r.ship_type)}</td>
+          <td>${escapeHtml((r.ports||[]).join(', ')) || '—'}</td>
           <td>${badge}</td>
         </tr>`;
       }).join('');

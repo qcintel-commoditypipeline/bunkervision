@@ -26,6 +26,16 @@ DEBUG        = os.getenv("FLASK_DEBUG", "0") == "1"
 HOST         = os.getenv("HOST", "127.0.0.1")
 PORT         = int(os.getenv("PORT", "5100"))
 
+# Shared admin token guarding /admin and every mutating API endpoint (checked
+# via the X-Admin-Token header or a ?token= query param). If UNSET, protected
+# endpoints return 503 — they fail CLOSED rather than running unauthenticated.
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
+
+# SQLite DB written by the independent price scrapers (integr8 / shipandbunker /
+# quantum). Configurable so dev machines aren't hardwired to the VPS path; the
+# default preserves production behaviour unchanged.
+BUNKER_PRICES_DB = os.getenv("BUNKER_PRICES_DB", "/root/bunkervision/bunker_prices.db")
+
 # Event detection thresholds
 STOP_SOG_KT          = 0.5    # knots — vessel considered stopped below this
 STOP_MIN_DURATION    = 10     # minutes stopped before we open a candidate event
@@ -44,9 +54,13 @@ AIS_KEEP_HOURS       = 48     # hours of raw positions to retain in DB
 DEFAULT_PUMP_RATE_MT_MIN = 3.5
 
 # ── Methodology flags ───────────────────────────────────────────────────────────
-# CRITICAL: every flag below DEFAULTS TO CURRENT (legacy) BEHAVIOUR so that
-# merely deploying this code does NOT move the live May number. Flip a flag
-# (and only then) to opt into the improved methodology.
+# MOST flags below default to legacy behaviour so that merely deploying this
+# code does not move the live number; flip a flag (and only then) to opt into
+# the improved methodology. Deliberate EXCEPTIONS that are active by default:
+#   * EVENT_QUALITY_FILTER_ENABLED = True  (enabled 2026-05-31; total ~-1.6%)
+#   * EVENT_MAX_DURATION_MIN — physically caps the tonnage duration term at
+#     16h, which LOWERS tonnage for any event longer than the cap (multi-day
+#     "events" no longer book physically impossible stems).
 
 # Event-quality filtering: when True, events shorter than MIN_BUNKER_EVENT_MIN
 # are EXCLUDED from VOLUME aggregation (they are still detected/logged/counted
@@ -59,6 +73,17 @@ EVENT_QUALITY_FILTER_ENABLED = True
 # Minimum plausible bunkering duration (minutes) for an event to contribute to
 # VOLUME aggregation when EVENT_QUALITY_FILTER_ENABLED is True.
 MIN_BUNKER_EVENT_MIN = 30
+
+# Physical cap (minutes) on the DURATION TERM used to convert an event into
+# tonnage: estimated_mt = min(duration_min, EVENT_MAX_DURATION_MIN) * pump_rate.
+# Real Singapore bunkering runs ~3-12h; time alongside beyond 16h is AIS gaps
+# or a barge parked next to the same ship, not continuous pumping — without a
+# cap an 18-day "event" books a physically impossible ~90k mt stem. Events
+# LONGER than the cap still close exactly as before (true duration_min is
+# stored and event detection is unchanged); only the tonnage term is capped.
+# NOTE: unlike most flags this is ACTIVE IMMEDIATELY and changes tonnage for
+# events longer than the cap.
+EVENT_MAX_DURATION_MIN = 960   # 16 hours
 
 # Collapse obvious re-openings / double-counts of the SAME bunker<->recipient
 # pair whose gap (next.start - prev.end) is below DEDUP_GAP_MIN minutes into a

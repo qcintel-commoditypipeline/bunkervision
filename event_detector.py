@@ -15,6 +15,7 @@ import db
 from config import (
     DEFAULT_PUMP_RATE_MT_MIN,
     DETECT_POLL_SECS,
+    EVENT_MAX_DURATION_MIN,
     PROX_RADIUS_M,
     PUMP_RATE_CALIB_SHRINKAGE,
     PUMP_RATE_CALIBRATION_ENABLED,
@@ -71,6 +72,21 @@ def _avg_pump_rate(port: str | None = None) -> float:
         if fitted is not None:
             return fitted
     return DEFAULT_PUMP_RATE_MT_MIN
+
+
+def capped_tonnage_mt(duration_min: float, pump_rate: float) -> float:
+    """
+    Convert an event duration into the tonnage proxy, with the duration term
+    physically capped at EVENT_MAX_DURATION_MIN:
+
+        estimated_mt = min(duration_min, EVENT_MAX_DURATION_MIN) * pump_rate
+
+    Time alongside beyond the cap (default 16h) is AIS gaps or a barge parked
+    next to the same ship, not continuous pumping — an 18-day "event" must not
+    book a ~90k mt stem. Events longer than the cap still close as before with
+    their TRUE duration recorded; only the tonnage term is capped.
+    """
+    return round(min(duration_min, EVENT_MAX_DURATION_MIN) * pump_rate, 1)
 
 
 def _fit_pump_rate(port: str | None) -> float | None:
@@ -324,7 +340,9 @@ def _close_stale_events() -> None:
             now = datetime.now(timezone.utc)
             start_aware = start_ts.replace(tzinfo=timezone.utc) if start_ts.tzinfo is None else start_ts
             duration_min = max(1, int((now - start_aware).total_seconds() / 60))
-            estimated_mt = round(duration_min * pump_rate, 1)
+            # Tonnage uses the duration term capped at EVENT_MAX_DURATION_MIN;
+            # the event itself still closes with its true duration_min.
+            estimated_mt = capped_tonnage_mt(duration_min, pump_rate)
 
             d_start, d_end, draught_vol = _draught_vol_estimate(bunker_mmsi, start_ts, now, dwt)
             delta_m = round(d_start - d_end, 2) if d_start and d_end else None

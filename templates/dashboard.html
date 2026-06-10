@@ -98,6 +98,12 @@
         </div>
       </div>
       <div id="demand-chart" style="min-height:380px;width:100%;"></div>
+      {% if port_cfg.has_registry %}
+      <div class="text-muted mt-1" style="font-size:var(--t-xs);opacity:0.85;">
+        Amber = provisional AIS-derived estimate. Unvalidated — single graded month error −52%;
+        pump-rate calibration requires 3 complete officially-published months.
+      </div>
+      {% endif %}
     </div>
   </div>
   <div class="card" style="min-width:0;">
@@ -358,8 +364,8 @@ async function refreshEventFeed() {
         <div class="event-feed-item d-flex" style="margin-bottom:0.65rem;padding-bottom:0.65rem;border-bottom:1px solid rgba(48,54,61,0.5);">
           ${statusDot}
           <div>
-            <div style="color:#e6edf3;font-weight:500;">${ev.bunker_name || ev.bunker_imo || 'Unknown bunker'}</div>
-            <div style="color:#8b949e;">alongside ${ev.recipient_name || ev.recipient_mmsi || 'unknown'}</div>
+            <div style="color:#e6edf3;font-weight:500;">${escapeHtml(ev.bunker_name || ev.bunker_imo || 'Unknown bunker')}</div>
+            <div style="color:#8b949e;">alongside ${escapeHtml(ev.recipient_name || ev.recipient_mmsi || 'unknown')}</div>
             <div style="color:#8b949e;font-size:0.72rem;">${dur}${mt ? ' · ' + mt : ''} · ${ts}</div>
           </div>
         </div>`;
@@ -376,7 +382,7 @@ async function refreshEventFeed() {
         const sogStr = parseFloat(v.sog || 0).toFixed(1) + ' kt';
         return `
           <div class="d-flex justify-content-between" style="margin-bottom:0.45rem;font-size:0.78rem;border-bottom:1px solid rgba(48,54,61,0.3);padding-bottom:0.4rem;">
-            <span style="color:#e6edf3;font-weight:500;">${v.name || v.mmsi}</span>
+            <span style="color:#e6edf3;font-weight:500;">${escapeHtml(v.name || v.mmsi)}</span>
             <span style="color:#8b949e;">${sogStr}</span>
           </div>`;
       }).join('') || '<div style="color:#8b949e;padding:1rem 0;">No vessels in range</div>';

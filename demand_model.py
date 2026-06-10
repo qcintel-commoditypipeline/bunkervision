@@ -9,7 +9,7 @@ import calendar
 from datetime import date, datetime, timedelta, timezone
 
 import db
-from config import DEFAULT_PUMP_RATE_MT_MIN, PORTS
+from config import BUNKER_PRICES_DB, DEFAULT_PUMP_RATE_MT_MIN, PORTS
 
 
 def _db_port(port: str) -> str:
@@ -63,7 +63,7 @@ def running_demand_estimate(port: str = "singapore",
     if has_registry:
         # Quality-filter / dedup are applied inside aggregate_closed_event_mt and
         # are gated by config flags (legacy aggregate when flags default to off).
-        from event_detector import _avg_pump_rate, aggregate_closed_event_mt
+        from event_detector import _avg_pump_rate, aggregate_closed_event_mt, capped_tonnage_mt
         event_count, estimated_mt = aggregate_closed_event_mt(port, year, month)
 
         open_rows = db.query("""
@@ -80,7 +80,9 @@ def running_demand_estimate(port: str = "singapore",
                 if hasattr(start, "replace"):
                     start = start.replace(tzinfo=timezone.utc)
                 duration_min = max(1, int((now - start).total_seconds() / 60))
-                open_mt += duration_min * pump_rate
+                # Same physical cap as closed events (EVENT_MAX_DURATION_MIN):
+                # a long-running open event must not inflate the live nowcast.
+                open_mt += capped_tonnage_mt(duration_min, pump_rate)
 
     total_so_far = estimated_mt + open_mt
     projected = (total_so_far / days_elapsed * days_in_month) if (has_registry and days_elapsed > 0 and total_so_far > 0) else None
@@ -289,7 +291,7 @@ def _monthly_avg_price(port: str, grade: str = "VLSFO") -> dict[str, float]:
     if not sb_port:
         return {}
     try:
-        conn = sqlite3.connect("/root/bunkervision/bunker_prices.db")
+        conn = sqlite3.connect(BUNKER_PRICES_DB)
         rows = conn.execute("""
             SELECT strftime('%Y-%m', date) AS ym, AVG(price_usd)
             FROM bunker_prices
