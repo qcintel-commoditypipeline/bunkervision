@@ -52,7 +52,11 @@ _PROTECTED_PATHS = {
 def _is_protected_request() -> bool:
     if request.method == "POST":
         return True
-    return request.path in _PROTECTED_PATHS
+    # Match on path suffix so the gate holds whether or not nginx strips the
+    # "/bunkervision" location prefix before proxying (request.path may be
+    # "/admin" or "/bunkervision/admin" depending on proxy_pass config).
+    path = request.path
+    return any(path == p or path.endswith(p) for p in _PROTECTED_PATHS)
 
 
 @app.before_request
