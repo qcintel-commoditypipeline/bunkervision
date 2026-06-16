@@ -107,7 +107,7 @@ def running_demand_estimate(port: str = "singapore",
     if projected and seasonal and seasonal > 0:
         pct = round((projected / seasonal - 1) * 100, 1)
 
-    return {
+    result = {
         "port": port,
         "has_registry": has_registry,
         "year": year,
@@ -123,6 +123,25 @@ def running_demand_estimate(port: str = "singapore",
         "last_official_month": str(last_official_month) if last_official_month else None,
         "pct_vs_seasonal": pct,
     }
+
+    # Calibrated-nowcast override (OFF by default). When enabled, the validated
+    # forecast of the official series supersedes the duration-based projection
+    # for the headline figure. Flag off -> result is returned byte-identical.
+    from config import USE_CALIBRATED_NOWCAST
+    if USE_CALIBRATED_NOWCAST:
+        try:
+            import nowcast_model
+            nc = nowcast_model.calibrated_nowcast(port, year, month)
+            result["estimate_method"] = "calibrated_nowcast"
+            result["nowcast_level_mt"] = nc["level_mt"]
+            result["nowcast_ais_adjustment_pct"] = nc["ais_adjustment_pct"]
+            result["projected_month_mt"] = nc["nowcast_mt"]
+            if seasonal and seasonal > 0:
+                result["pct_vs_seasonal"] = round((nc["nowcast_mt"] / seasonal - 1) * 100, 1)
+        except Exception:
+            result["estimate_method"] = "duration_engine"  # safe fallback
+
+    return result
 
 
 # ── Month-end snapshot ─────────────────────────────────────────────────────────

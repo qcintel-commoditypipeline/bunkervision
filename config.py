@@ -119,6 +119,34 @@ PARTIAL_MONTH_GUARD_ENABLED = False
 # month-end). Used only when PARTIAL_MONTH_GUARD_ENABLED is True.
 MONTH_COVERAGE_MIN_FRACTION = 0.9
 
+# ── Calibrated nowcast (salvage prototype, 2026-06) ─────────────────────────
+# A demand nowcast that replaces the broken duration×rate "measurement" with a
+# calibrated forecast of the OFFICIAL monthly series (76 months of MPA history,
+# strong seasonality+trend), optionally nudged by an AIS leading-indicator that
+# earns weight only as graded months accrue. See nowcast_model.py + docs/.
+#
+#   nowcast = level_model(month) × (1 + α · z_ais)
+#
+# The level model (log-space damped-ETS/Theta blend) was selected out-of-sample
+# in the 2026-06 bake-off: MAE 4.07% vs 8.35% for the old seasonal baseline,
+# near-zero bias. The AIS term is a small, shrinkage-regularised deviation nudge:
+# with only ~2 months of AIS history α≈0 today, so the nowcast == the level model.
+# OFF by default — flipping this changes /api/demand; the shadow backtest panel
+# (/api/accuracy-backtest) compares it to the live model without touching either.
+USE_CALIBRATED_NOWCAST = False
+
+# AIS deviation earns weight only after this many GRADED months of AIS history
+# (out-of-sample evidence that the signal helps). Below this, α = 0.
+NOWCAST_AIS_MIN_GRADED_MONTHS = 6
+
+# Hard cap on the AIS nudge magnitude (fraction of level). Even fully "earned",
+# the AIS term may move the nowcast at most ±10% — it informs, never dominates.
+NOWCAST_AIS_MAX_ALPHA = 0.10
+
+# Minimum months of official history before the level model will fit; below this
+# it falls back to a trend-adjusted seasonal mean.
+NOWCAST_LEVEL_MIN_TRAIN = 30
+
 # MPA URLs
 MPA_BUNKER_STATS_URL    = "https://www.mpa.gov.sg/maritime-singapore/what-we-do/develop-singapore-as-an-international-maritime-centre/port-statistics/bunkering"
 MPA_VESSEL_REGISTRY_URL = "https://www.mpa.gov.sg/port-marine-ops/port-operations/marine-services/bunkering/list-of-licensed-bunker-suppliers"

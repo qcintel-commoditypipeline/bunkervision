@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Nowcast backtest (shadow) · BunkerVision{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+  <div>
+    <h1 class="h4 mb-1" style="font-weight:700;letter-spacing:-.01em">Calibrated nowcast — out-of-sample backtest</h1>
+    <div class="text-muted" style="font-size:.85rem">
+      Walk-forward (expanding window): each month forecast using only earlier months.
+      Shadow / experimental — does not affect the live estimate.
+    </div>
+  </div>
+  <span class="badge rounded-pill" style="background:#3a2d00;color:#e3b341;border:1px solid #6c5400;font-weight:600">
+    SHADOW · not live
+  </span>
+</div>
+
+<div id="bt-kpis" class="row g-3 mb-3"></div>
+
+<div class="card border-0 mb-3" style="background:#0d1117">
+  <div class="card-body">
+    <div class="d-flex align-items-baseline justify-content-between mb-2">
+      <h2 class="h6 mb-0 text-muted" style="font-weight:600">Nowcast vs official (out-of-sample)</h2>
+      <span class="text-muted" style="font-size:.75rem">grey = official · blue = nowcast · amber = old engine</span>
+    </div>
+    <div id="bt-chart" style="height:340px"></div>
+  </div>
+</div>
+
+<div class="card border-0" style="background:#0d1117">
+  <div class="card-body">
+    <h2 class="h6 mb-3 text-muted" style="font-weight:600">Per-month detail</h2>
+    <div class="table-responsive">
+      <table class="table table-sm table-dark align-middle mb-0" style="font-size:.83rem">
+        <thead>
+          <tr class="text-muted">
+            <th>Month</th>
+            <th class="text-end">Official</th>
+            <th class="text-end">Nowcast</th>
+            <th class="text-end">Nowcast err</th>
+            <th class="text-end">Seasonal (old baseline)</th>
+            <th class="text-end">Old engine</th>
+          </tr>
+        </thead>
+        <tbody id="bt-rows"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const fmtMt  = v => v == null ? '<span class="text-muted">—</span>' : (v/1e6).toFixed(3) + 'M';
+const fmtPct = v => {
+  if (v == null) return '<span class="text-muted">—</span>';
+  const c = Math.abs(v) <= 5 ? '#3fb950' : (Math.abs(v) <= 10 ? '#d29922' : '#f85149');
+  return `<span style="color:${c};font-variant-numeric:tabular-nums">${v > 0 ? '+' : ''}${v.toFixed(1)}%</span>`;
+};
+
+function kpi(label, value, sub, accent) {
+  return `<div class="col-6 col-lg-3">
+    <div class="card border-0 h-100" style="background:#0d1117">
+      <div class="card-body py-3">
+        <div class="text-muted" style="font-size:.72rem;text-transform:uppercase;letter-spacing:.04em">${escapeHtml(label)}</div>
+        <div style="font-size:1.5rem;font-weight:700;color:${accent || '#e6edf3'};font-variant-numeric:tabular-nums">${escapeHtml(value)}</div>
+        <div class="text-muted" style="font-size:.75rem">${escapeHtml(sub)}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function loadBacktest() {
+  let d;
+  try {
+    d = await fetch(`/api/accuracy-backtest?port=${CURRENT_PORT}`).then(r => r.json());
+  } catch (e) { return; }
+  const s = d.summary || {};
+  const nc = s.nowcast || {}, sn = s.seasonal_naive || {};
+
+  // KPIs: headline = nowcast MAE vs the seasonal baseline the dashboard uses today.
+  const improve = (sn.mae_pct && nc.mae_pct) ? (100 * (1 - nc.mae_pct / sn.mae_pct)).toFixed(0) : '—';
+  document.getElementById('bt-kpis').innerHTML =
+    kpi('Nowcast MAE (OOS)', (nc.mae_pct ?? '—') + '%', `${nc.n || 0} months, bias ${nc.bias_pct ?? '—'}%`, '#58a6ff') +
+    kpi('Current baseline MAE', (sn.mae_pct ?? '—') + '%', `seasonal avg, bias ${sn.bias_pct ?? '—'}%`, '#8b949e') +
+    kpi('Error reduction', improve + '%', 'nowcast vs current baseline', '#3fb950') +
+    kpi('Within 5% / 10%', `${nc.within_5pct ?? '—'} / ${nc.within_10pct ?? '—'}`, `of ${nc.n || 0} OOS months`, '#e6edf3');
+
+  // Table
+  const rows = d.rows || [];
+  document.getElementById('bt-rows').innerHTML = rows.slice().reverse().map(r => `
+    <tr>
+      <td style="font-variant-numeric:tabular-nums">${escapeHtml(r.month)}</td>
+      <td class="text-end" style="font-variant-numeric:tabular-nums">${fmtMt(r.official_mt)}</td>
+      <td class="text-end" style="font-variant-numeric:tabular-nums">${fmtMt(r.nowcast_mt)}</td>
+      <td class="text-end">${fmtPct(r.nowcast_err_pct)}</td>
+      <td class="text-end" style="font-variant-numeric:tabular-nums">${fmtMt(r.seasonal_naive_mt)} ${fmtPct(r.seasonal_naive_err_pct)}</td>
+      <td class="text-end" style="font-variant-numeric:tabular-nums">${r.old_engine_mt == null ? '<span class="text-muted">—</span>' : fmtMt(r.old_engine_mt) + ' ' + fmtPct(r.old_engine_err_pct)}</td>
+    </tr>`).join('');
+
+  // Chart
+  const x = rows.map(r => r.month);
+  const official = rows.map(r => r.official_mt);
+  const nowcast = rows.map(r => r.nowcast_mt);
+  const oldx = rows.filter(r => r.old_engine_mt != null).map(r => r.month);
+  const oldy = rows.filter(r => r.old_engine_mt != null).map(r => r.old_engine_mt);
+  const fig = normalizeFig({
+    data: [
+      { x, y: official, type: 'scatter', mode: 'lines', name: 'Official',
+        line: { color: '#8b949e', width: 2 } },
+      { x, y: nowcast, type: 'scatter', mode: 'lines', name: 'Nowcast',
+        line: { color: '#58a6ff', width: 2.5 } },
+      { x: oldx, y: oldy, type: 'scatter', mode: 'markers', name: 'Old engine',
+        marker: { color: '#d29922', size: 9, symbol: 'x' } },
+    ],
+    layout: {
+      margin: { l: 48, r: 12, t: 8, b: 32 }, height: 340,
+      showlegend: false,
+      xaxis: { gridcolor: 'rgba(255,255,255,.04)' },
+      yaxis: { gridcolor: 'rgba(255,255,255,.06)', tickformat: '.2s', ticksuffix: '' },
+    },
+  });
+  await Plotly.newPlot('bt-chart', fig.data, fig.layout, PLY_CFG);
+}
+loadBacktest();
+</script>
+{% endblock %}
