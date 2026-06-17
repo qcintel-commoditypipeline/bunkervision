@@ -16,6 +16,9 @@ SERVER="${SERVER:-root@165.232.110.29}"
 WORKDIR="${WORKDIR:-/opt/scripts/bunkervision}"
 VENV="${VENV:-/opt/scripts/venv}"
 TS="$(date +%Y%m%d_%H%M%S)"
+# Disable SSH connection multiplexing (ControlMaster from ~/.ssh/config fails in
+# this environment); each scp/ssh opens its own direct connection.
+SSH_OPTS="-o ControlMaster=no -o ControlPath=none"
 
 FILES="app.py config.py demand_model.py nowcast_model.py backtest_nowcast.py \
 ais_signal.py monthly_study.py set_official.py requirements.txt \
@@ -25,10 +28,10 @@ echo "==> Bundling runtime files"
 tar czf "/tmp/bv_hardening_${TS}.tgz" $FILES
 
 echo "==> Copying to ${SERVER}"
-scp "/tmp/bv_hardening_${TS}.tgz" "${SERVER}:/tmp/"
+scp $SSH_OPTS "/tmp/bv_hardening_${TS}.tgz" "${SERVER}:/tmp/"
 
 echo "==> Deploying on ${SERVER} (backup -> extract -> pip install -> restart)"
-ssh "${SERVER}" "TS='${TS}' WORKDIR='${WORKDIR}' VENV='${VENV}' FILES='${FILES}' bash -s" <<'REMOTE'
+ssh $SSH_OPTS "${SERVER}" "TS='${TS}' WORKDIR='${WORKDIR}' VENV='${VENV}' FILES='${FILES}' bash -s" <<'REMOTE'
 set -euo pipefail
 cd "$WORKDIR"
 # Back up only the files that already exist (new files are skipped, not fatal).
@@ -38,7 +41,9 @@ tar xzf "/tmp/bv_hardening_${TS}.tgz" -C "$WORKDIR"
 systemctl restart bunkervision.service
 sleep 3
 echo -n "service: "; systemctl is-active bunkervision.service
-curl -fsS "127.0.0.1:5100/api/demand?port=singapore" >/dev/null && echo "live /api/demand OK (headline unchanged, flag off)"
+curl -fsS "127.0.0.1:5100/api/demand?port=singapore" | grep -q calibrated_nowcast \
+  && echo "live /api/demand OK — headline = calibrated nowcast (flag ON)" \
+  || echo "WARN: /api/demand did not report calibrated_nowcast — check the flag"
 echo "backup at /root/bunkervision_backup_${TS}.tgz"
 REMOTE
 
