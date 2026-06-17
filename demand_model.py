@@ -429,7 +429,10 @@ def demand_chart_data(port: str = "singapore", window: str = "3y") -> dict:
         WHERE port = ?
         ORDER BY year, month
     """, [port])
-    if est_rows:
+    from config import USE_CALIBRATED_NOWCAST
+    if est_rows and not USE_CALIBRATED_NOWCAST:
+        # Legacy duration-engine "Provisional" amber bars. Suppressed once the
+        # calibrated nowcast is the headline (those snapshots are the retired model).
         est_x, est_y, est_hover, est_bar_text = [], [], [], []
         for yr, mo, mt, pct in est_rows:
             label = f"{yr}-{mo:02d}"

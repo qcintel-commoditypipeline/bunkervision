@@ -2,9 +2,11 @@
 # Deploy the calibrated-nowcast salvage to the BunkerVision droplet.
 #
 # Ships the runtime files, installs the new deps (statsmodels/scipy), and restarts.
-# USE_CALIBRATED_NOWCAST ships as False, so the LIVE headline is UNCHANGED — this
-# only makes the read-only /backtest shadow panel live and the AIS signal test
-# runnable. Reversible: the current versions are backed up first.
+# USE_CALIBRATED_NOWCAST ships as True: the live headline becomes the calibrated
+# nowcast, the dashboard track record shows the nowcast's out-of-sample record, the
+# /backtest shadow panel is live, and the AIS signal test starts logging.
+# Reversible: the current versions are backed up first (and the flag can be set
+# False to revert behaviour without redeploying).
 #
 # Run from a machine with SSH access to the droplet, from the repo root:
 #   bash deploy/deploy_hardening.sh
@@ -16,7 +18,8 @@ VENV="${VENV:-/opt/scripts/venv}"
 TS="$(date +%Y%m%d_%H%M%S)"
 
 FILES="app.py config.py demand_model.py nowcast_model.py backtest_nowcast.py \
-ais_signal.py monthly_study.py set_official.py requirements.txt templates/backtest.html"
+ais_signal.py monthly_study.py set_official.py requirements.txt \
+templates/backtest.html templates/dashboard.html"
 
 echo "==> Bundling runtime files"
 tar czf "/tmp/bv_hardening_${TS}.tgz" $FILES

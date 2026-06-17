@@ -133,7 +133,7 @@ MONTH_COVERAGE_MIN_FRACTION = 0.9
 # with only ~2 months of AIS history α≈0 today, so the nowcast == the level model.
 # OFF by default — flipping this changes /api/demand; the shadow backtest panel
 # (/api/accuracy-backtest) compares it to the live model without touching either.
-USE_CALIBRATED_NOWCAST = False
+USE_CALIBRATED_NOWCAST = True
 
 # AIS deviation earns weight only after this many GRADED months of AIS history
 # (out-of-sample evidence that the signal helps). Below this, α = 0.

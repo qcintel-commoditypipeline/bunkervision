@@ -345,16 +345,18 @@ def api_stats():
 def api_accuracy():
     """Model track-record for a port. Defensive: the `accuracy` module is owned by
     another agent and may not exist yet — never crash, return empty shape on error."""
+    port = request.args.get("port", "singapore")
     try:
+        from config import USE_CALIBRATED_NOWCAST
+        if USE_CALIBRATED_NOWCAST:
+            # Headline is the calibrated nowcast → show ITS out-of-sample record,
+            # not the retired duration engine's. Same shape, so the panel is unchanged.
+            import backtest_nowcast
+            return jsonify(backtest_nowcast.nowcast_accuracy_report(port))
         import accuracy
-        return jsonify(accuracy.accuracy_report(request.args.get("port", "singapore")))
+        return jsonify(accuracy.accuracy_report(port))
     except Exception as e:
-        return jsonify({
-            "port": request.args.get("port", "singapore"),
-            "rows": [],
-            "summary": {},
-            "error": str(e),
-        })
+        return jsonify({"port": port, "rows": [], "summary": {}, "error": str(e)})
 
 
 @app.route("/api/accuracy-backtest")

@@ -128,6 +128,51 @@ def oos_table(port: str = "singapore", min_train: int = 36) -> dict:
     return out
 
 
+_NC_ACC_CACHE: dict = {}
+_NC_ACC_TTL = 6 * 3600  # seconds; the OOS backtest is deterministic for a DB state
+
+
+def nowcast_accuracy_report(port: str = "singapore") -> dict:
+    """The nowcast's out-of-sample record in the SAME shape as
+    accuracy.accuracy_report(), so the dashboard track-record panel can render it
+    unchanged. Cached (the 40-fold backtest is slow); first call warms it."""
+    import time
+    now = time.time()
+    hit = _NC_ACC_CACHE.get(port)
+    if hit and (now - hit[0]) < _NC_ACC_TTL:
+        return hit[1]
+
+    t = oos_table(port)
+    rows = []
+    for r in t.get("rows", []):
+        err = r.get("nowcast_err_pct")
+        rows.append({
+            "label": r["month"][:7],
+            "year": int(r["month"][:4]), "month": int(r["month"][5:7]),
+            "estimated_mt": r.get("nowcast_mt"),
+            "official_mt": r.get("official_mt"),
+            "signed_pct_err": err,
+            "abs_pct_err": None if err is None else abs(err),
+            "status": "graded" if r.get("nowcast_mt") is not None else "pending_official",
+        })
+    s = t.get("summary", {}).get("nowcast", {})
+    out = {
+        "port": port,
+        "rows": rows[-18:],   # recent months keep the panel legible; summary is over all
+        "summary": {
+            "months_graded": s.get("n"),
+            "mean_abs_pct_err": s.get("mae_pct"),
+            "median_abs_pct_err": s.get("median_abs_pct"),
+            "within_5pct": s.get("within_5pct"),
+            "within_10pct": s.get("within_10pct"),
+            "bias_pct": s.get("bias_pct"),
+        },
+        "method": "calibrated_nowcast_oos",
+    }
+    _NC_ACC_CACHE[port] = (now, out)
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--port", default="singapore")
