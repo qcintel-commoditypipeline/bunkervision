@@ -15,3 +15,5 @@ pyodbc>=5.0
 pdfplumber>=0.11
 openpyxl>=3.1
 pymysql>=1.1
+statsmodels>=0.14
+scipy>=1.11
