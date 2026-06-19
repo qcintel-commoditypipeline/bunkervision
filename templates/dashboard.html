@@ -152,6 +152,25 @@
     </div>
   </div>
 </div>
+
+{# ── AIS signal test — is bunkering data earning its place in the nowcast? ────── #}
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <span class="section-label mb-0">AIS SIGNAL — IS BUNKERING DATA EARNING ITS PLACE?</span>
+      <span class="text-muted" style="font-size:var(--t-xs);" id="ais-proj"></span>
+    </div>
+    <div class="d-flex align-items-baseline gap-2 flex-wrap mb-2">
+      <span id="ais-verdict" style="font-size:1.15rem;font-weight:700;">—</span>
+      <span id="ais-conf" class="badge rounded-pill" style="display:none;"></span>
+    </div>
+    <div class="text-muted mb-3" id="ais-detail" style="font-size:var(--t-sm);"></div>
+    <div class="ais-bar" style="height:6px;border-radius:3px;background:rgba(139,148,158,0.18);overflow:hidden;max-width:420px;">
+      <div id="ais-bar-fill" style="height:100%;width:0;background:#58a6ff;transition:width .4s;"></div>
+    </div>
+    <div class="text-muted mt-1" style="font-size:var(--t-xs);" id="ais-bar-label">accruing about one month-pair per month</div>
+  </div>
+</div>
 {% endif %}
 
 {# ── Live map + feed (secondary — behind a tab) ──────────────────────────────── #}
@@ -347,6 +366,43 @@ async function refreshAccuracy() {
   }).join('');
 }
 
+// ── AIS signal test — does bunkering activity beat the forecast yet? ───────────
+async function refreshAisSignal() {
+  const vEl = document.getElementById('ais-verdict');
+  if (!vEl) return;
+  let d;
+  try { d = await fetch(`/api/ais-signal?port=${CURRENT_PORT}`).then(r => r.json()); }
+  catch(e) { return; }
+
+  const conf = d.confidence || 'none';
+  const colour = { none:'#8b949e', directional:'#58a6ff', low:'#d29922',
+                   tentative:'#3fb950', confident:'#3fb950' }[conf] || '#8b949e';
+
+  vEl.textContent = d.verdict || '—';
+  vEl.style.color = colour;
+
+  const confEl = document.getElementById('ais-conf');
+  if (conf && conf !== 'none') {
+    confEl.style.display = '';
+    confEl.textContent = conf;
+    confEl.style.background = colour + '22';   // #RRGGBBAA translucent
+    confEl.style.color = colour;
+    confEl.style.border = '1px solid ' + colour;
+  } else { confEl.style.display = 'none'; }
+
+  document.getElementById('ais-detail').textContent = d.detail || '';
+
+  const n = d.n_usable_pairs || 0;
+  const fill = document.getElementById('ais-bar-fill');
+  fill.style.width = Math.min(100, Math.round(n / 6 * 100)) + '%';
+  fill.style.background = colour;
+  document.getElementById('ais-bar-label').textContent =
+    `${n} / 6 usable month-pairs toward a tentative verdict`;
+
+  const proj = document.getElementById('ais-proj');
+  if (d.tentative_at) proj.textContent = `tentative ~${d.tentative_at} · confident ~${d.confident_at}`;
+}
+
 // ── Event / vessel feed ──────────────────────────────────────────────────────
 async function refreshEventFeed() {
   if (PORT_CFG.has_registry) {
@@ -427,9 +483,11 @@ document.querySelectorAll('#ops-tabs button[data-bs-toggle="pill"]').forEach(b =
 refreshKPIs();
 refreshEventFeed();
 refreshAccuracy();
+refreshAisSignal();
 setInterval(refreshKPIs, 30_000);
 setInterval(refreshEventFeed, 20_000);
 setInterval(refreshAccuracy, 300_000);
+setInterval(refreshAisSignal, 600_000);
 setInterval(() => {
   loadDemandCharts();
 }, 120_000);

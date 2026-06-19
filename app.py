@@ -382,6 +382,19 @@ def backtest_page():
                            port_cfg=PORTS[port])
 
 
+@app.route("/api/ais-signal")
+def api_ais_signal():
+    """AIS-vs-residual signal test verdict — is bunkering activity earning its place
+    in the nowcast yet? Read-only, defensive, accrues monthly."""
+    port = request.args.get("port", "singapore")
+    try:
+        import ais_signal
+        return jsonify(ais_signal.signal_test(port))
+    except Exception as e:
+        return jsonify({"port": port, "verdict": "unavailable", "confidence": "none",
+                        "n_usable_pairs": 0, "n_months_ais": 0, "detail": str(e)})
+
+
 @app.route("/api/registry/candidates")
 def api_registry_candidates():
     port = _get_port()
