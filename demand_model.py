@@ -289,6 +289,42 @@ def refresh_provisional_estimates(port: str = "singapore") -> int:
     return refreshed
 
 
+def _gap_month_nowcasts(port: str, last_official: date | None) -> list[tuple[date, float]]:
+    """Calibrated nowcasts for completed months the authority hasn't published
+    yet — every month after `last_official` up to (not including) the current
+    month. These months would otherwise render as holes in the charts: the
+    official bar doesn't exist yet, the legacy provisional snapshots are
+    suppressed while USE_CALIBRATED_NOWCAST is on, and the live forecast only
+    covers the current month. Each entry drops out as its official lands.
+    """
+    from config import USE_CALIBRATED_NOWCAST
+    port_cfg = PORTS.get(port, {})
+    if not (USE_CALIBRATED_NOWCAST
+            and port_cfg.get("has_registry")
+            and port_cfg.get("data_frequency", "monthly") == "monthly"
+            and last_official is not None):
+        return []
+
+    import nowcast_model
+    cur_month = date.today().replace(day=1)
+    out: list[tuple[date, float]] = []
+    y, m = last_official.year, last_official.month
+    for _ in range(6):  # cap: a stale official feed must not paint a wall of nowcast bars
+        m += 1
+        if m > 12:
+            y, m = y + 1, 1
+        d = date(y, m, 1)
+        if d >= cur_month:
+            break
+        try:
+            mt = nowcast_model.calibrated_nowcast(port, y, m).get("nowcast_mt")
+        except Exception:
+            continue
+        if mt:
+            out.append((d, float(mt)))
+    return out
+
+
 # ── Charts ─────────────────────────────────────────────────────────────────────
 
 def _monthly_avg_price(port: str, grade: str = "VLSFO") -> dict[str, float]:
@@ -463,6 +499,39 @@ def demand_chart_data(port: str = "singapore", window: str = "3y") -> dict:
                 customdata=est_hover,
             ))
 
+    # Completed-but-unpublished months (amber "Nowcast") — e.g. June once July
+    # starts, until MPA publishes the June official ~6 weeks later.
+    last_official = None
+    if not df.empty:
+        last_official = pd.Timestamp(df["month"].max()).date().replace(day=1)
+    gap_nowcasts = _gap_month_nowcasts(port, last_official)
+    if gap_nowcasts:
+        nc_x, nc_y, nc_hover, nc_text = [], [], [], []
+        for d, mt in gap_nowcasts:
+            seasonal = seasonal_avg_monthly_volume(d.month, port)
+            pct_str = (f"{(mt / seasonal - 1) * 100:+.1f}% vs seasonal"
+                       if seasonal and seasonal > 0 else "")
+            month_name = f"{_MONTH_NAMES[d.month - 1]} {d.year}"
+            nc_x.append(f"{d.year}-{d.month:02d}")
+            nc_y.append(mt / 1e6)
+            nc_hover.append(
+                f"<b>{month_name}</b><br>Nowcast: {mt/1e6:.2f} Mt"
+                + (f"<br>{pct_str}" if pct_str else "")
+            )
+            nc_text.append(f"{mt/1e6:.2f} Mt" + (f"<br>{pct_str}" if pct_str else ""))
+        fig.add_trace(go.Bar(
+            x=nc_x,
+            y=nc_y,
+            name="Nowcast",
+            marker_color="#e3b341",
+            opacity=0.75,
+            width=_BAR_W_MS,
+            text=nc_text,
+            textposition="outside",
+            hovertemplate="%{customdata}<extra></extra>",
+            customdata=nc_hover,
+        ))
+
     # Current-month live forecast (green/red)
     has_registry = port_cfg.get("has_registry", False)
     if has_registry:
@@ -551,15 +620,26 @@ def demand_sparkline_data(port: str = "singapore") -> dict:
         fill="tozeroy", fillcolor="rgba(88,166,255,0.10)",
         hovertemplate="%{x}: %{y:.2f} Mt<extra></extra>",
     ))
+
+    # Forecast tail: nowcasts for completed-but-unpublished months, then the
+    # live current-month forecast — so the dotted line has no hole after rollover.
+    last_m = df["month"].max()
+    last_official = (last_m.date() if hasattr(last_m, "date") else last_m).replace(day=1)
+    gap = _gap_month_nowcasts(port, last_official)
+    fx = [d.strftime("%Y-%m") for d, _ in gap]
+    fy = [mt / 1e6 for _, mt in gap]
     if fc:
+        fx.append(date.today().strftime("%Y-%m"))
+        fy.append(fc / 1e6)
+    if fx:
         colour = "#3fb950" if (est.get("pct_vs_seasonal") or 0) >= 0 else "#f85149"
         fig.add_trace(go.Scatter(
-            x=[xs[-1], date.today().strftime("%Y-%m")], y=[ys[-1], fc / 1e6],
+            x=[xs[-1]] + fx, y=[ys[-1]] + fy,
             mode="lines+markers", line=dict(color=colour, width=2, dash="dot"),
             marker=dict(size=6, color=colour),
             hovertemplate="%{x} forecast: %{y:.2f} Mt<extra></extra>",
         ))
-    vals = ys + ([fc / 1e6] if fc else [])
+    vals = ys + fy
     fig.update_yaxes(range=[min(vals) * 0.9, max(vals) * 1.05])
     return fig.to_dict()
 
