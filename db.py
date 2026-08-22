@@ -178,3 +178,45 @@ def executemany(sql: str, rows: list[list]) -> None:
     with _lock:
         c = get_conn()
         c.executemany(sql, rows)
+
+
+def ping(lock_timeout: float = 2.0) -> dict:
+    """Liveness probe for /healthz: is the database USABLE right now?
+
+    Returns {"ok": bool, "via": "conn"|"cursor", "error": str|None}. Never raises.
+    The failure this guards (sibling WAKE, 2026-08-19): DuckDB hit "database has been
+    invalidated … Out of Memory" and every write failed for days while the connection
+    object still existed and the app answered 200. A trivial SELECT on an invalidated
+    connection raises, so the probe actually exercises the file.
+
+    Lock discipline: the module lock can be held for a while by the event detector or a
+    registry scan. A probe must not queue behind it (a probe that hangs looks like a
+    dead app to the caller, which is the wrong lie), so wait at most `lock_timeout`;
+    if the lock is busy, probe through a duplicate cursor of the same connection
+    (DuckDB cursors are independent connections to the same file, safe to use from
+    another thread) and say so in `via`. An invalidated database fails either way.
+    """
+    got = _lock.acquire(timeout=lock_timeout)
+    if got:
+        try:
+            get_conn().execute("SELECT 1").fetchone()
+            return {"ok": True, "via": "conn", "error": None}
+        except Exception as e:
+            return {"ok": False, "via": "conn", "error": f"{type(e).__name__}: {e}"[:300]}
+        finally:
+            _lock.release()
+    c = _conn
+    if c is None:
+        return {"ok": False, "via": "cursor", "error": "lock busy and no connection open"}
+    try:
+        cur = c.cursor()
+        try:
+            cur.execute("SELECT 1").fetchone()
+        finally:
+            try:
+                cur.close()
+            except Exception:
+                pass
+        return {"ok": True, "via": "cursor", "error": None}
+    except Exception as e:
+        return {"ok": False, "via": "cursor", "error": f"{type(e).__name__}: {e}"[:300]}
