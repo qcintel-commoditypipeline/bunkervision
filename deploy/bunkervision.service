@@ -18,6 +18,15 @@ ExecStart=/opt/scripts/venv/bin/gunicorn \
     wsgi:app
 Restart=always
 RestartSec=10
+# /healthz is a LIVENESS GATE (liveness.py): it answers 503 "degraded" when the AIS
+# feed has been silent for BUNKERVISION_INGEST_STALE_MINUTES (default 30, set in
+# .env), when DB writes fail, when the DuckDB file is unusable or when the ingest
+# thread is missing. A 503 is a SIGNAL TO A HUMAN, not a restart trigger:
+# Restart=always fires on process EXIT only, and there is deliberately no
+# WatchdogSec / ExecStartPost probe, so a provider outage (2026-08-19: aisstream
+# silent for days) cannot put the unit into a restart loop that hammers the per-key
+# throttle. Operator reaction per reason: deploy/HEALTHZ.md.
+# One-liner: curl -s -o /dev/null -w '%{http_code}\n' 127.0.0.1:5100/healthz
 StandardOutput=journal
 StandardError=journal
 
