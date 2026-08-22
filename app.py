@@ -244,6 +244,32 @@ def api_snapshot_estimate():
     return jsonify({"saved": saved, "port": port, "year": year, "month": month})
 
 
+@app.route("/healthz")
+def healthz():
+    """Liveness gate, not a process-up ping (see liveness.py for the incident).
+
+    200 {"ok": true, "status": "ok", ...}        the AIS ingest is provably alive
+    503 {"ok": false, "status": "degraded", ...}  with `reasons` naming the cause
+        (no AIS message for > BUNKERVISION_INGEST_STALE_MINUTES, DB write errors in
+        the window, DB unusable, ingest thread missing)
+    ?verbose=1 adds the cumulative counters and the thread table so the cause is
+    readable from one curl. A 503 is a signal to a human — systemd does not restart
+    on it (Restart=always is exit-only; no watchdog).
+    """
+    import ais_client
+    import liveness
+    body = liveness.gate.check(ais_client.ingest_snapshot(), db.ping())
+    body["project"] = "bunkervision"
+    if request.args.get("verbose") not in (None, "", "0", "false"):
+        import threading as _th
+        body["ingest"] = ais_client.ingest_stats()
+        body["threads"] = {t.name: t.is_alive() for t in _th.enumerate()}
+        body["gate"] = {"last_status": liveness.gate.last_status,
+                        "transitions": liveness.gate.transitions,
+                        "stale_minutes_env": liveness.STALE_MINUTES_ENV}
+    return jsonify(body), (200 if body["ok"] else 503)
+
+
 @app.route("/api/debug")
 def api_debug():
     import threading
