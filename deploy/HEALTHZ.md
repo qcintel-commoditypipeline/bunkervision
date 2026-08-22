@@ -39,7 +39,7 @@ count.
 loop the service — deliberately, because a provider outage is not fixed by
 restarting and reconnect storms hurt the per-key throttle. Nothing on the box
 probes this endpoint automatically (nginx `/bunkervision/` only proxies;
-`deploy_hardening.sh` curls `/api/demand`, not healthz). Read the `reasons`:
+`deploy_hardening.sh` prints the healthz status code once after restart, and only as information). Read the `reasons`:
 
 | reason | do |
 |---|---|

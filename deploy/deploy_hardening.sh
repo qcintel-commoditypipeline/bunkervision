@@ -20,8 +20,12 @@ TS="$(date +%Y%m%d_%H%M%S)"
 # this environment); each scp/ssh opens its own direct connection.
 SSH_OPTS="-o ControlMaster=no -o ControlPath=none"
 
+# Includes the /healthz liveness gate (liveness.py + the counters in ais_client.py and
+# db.ping(); see deploy/HEALTHZ.md). .env and the systemd unit are NOT shipped:
+# server secrets stay on the box, and the unit change in git is comment-only.
 FILES="app.py config.py demand_model.py nowcast_model.py backtest_nowcast.py \
 ais_signal.py monthly_study.py set_official.py requirements.txt \
+ais_client.py db.py liveness.py \
 templates/backtest.html templates/dashboard.html"
 
 echo "==> Bundling runtime files"
@@ -44,6 +48,10 @@ echo -n "service: "; systemctl is-active bunkervision.service
 curl -fsS "127.0.0.1:5100/api/demand?port=singapore" | grep -q calibrated_nowcast \
   && echo "live /api/demand OK — headline = calibrated nowcast (flag ON)" \
   || echo "WARN: /api/demand did not report calibrated_nowcast — check the flag"
+# /healthz is a liveness GATE (deploy/HEALTHZ.md): 200 inside the startup grace window,
+# 503 "degraded" once the AIS feed has been silent > BUNKERVISION_INGEST_STALE_MINUTES.
+# Either code means the route is live; only a connection failure is a deploy problem.
+echo -n "healthz: "; curl -s -o /dev/null -w '%{http_code}\n' 127.0.0.1:5100/healthz || echo "UNREACHABLE"
 echo "backup at /root/bunkervision_backup_${TS}.tgz"
 REMOTE
 
