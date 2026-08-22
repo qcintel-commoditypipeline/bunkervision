@@ -7,7 +7,7 @@
     <h5>{{ port_cfg.name }}</h5>
     <div class="subtitle">
       {% if port_cfg.has_registry %}
-        AIS-derived nowcast vs official sales · model track record
+        Calibrated demand nowcast vs official sales · out-of-sample track record
       {% elif port_cfg.data_source %}
         Historical demand data · live AIS vessel positions
       {% else %}
@@ -25,7 +25,7 @@
   <div class="hero-card" id="hero-nowcast">
     <div class="hero-label">Current-Month Nowcast</div>
     <div class="hero-number"><span id="hero-proj">—</span></div>
-    <div class="hero-sub" id="hero-proj-sub">projecting full-month demand</div>
+    <div class="hero-sub" id="hero-proj-sub">calibrated full-month forecast</div>
     <div class="mt-2">
       <span class="verdict-pill verdict-neu" id="hero-verdict">awaiting data</span>
     </div>
@@ -42,9 +42,9 @@
     <div class="kpi-sub" id="kv-official-sub">most recent MPA figure</div>
   </div>
   <div class="kpi-card">
-    <div class="kpi-label">Detected MTD</div>
+    <div class="kpi-label">AIS Activity MTD</div>
     <div class="kpi-val" id="kv-mtd">—</div>
-    <div class="kpi-sub" id="kv-mtd-sub">events so far this month</div>
+    <div class="kpi-sub" id="kv-mtd-sub">bunkering events this month</div>
   </div>
   <div class="kpi-card">
     <div class="kpi-label">Live / Active</div>
@@ -85,7 +85,7 @@
       <div class="chart-head">
         <div class="section-label mb-0">
           {% if port_cfg.has_registry %}
-            {{ port_cfg.name | upper }} BUNKER SALES — AIS PROJECTED VS OFFICIAL
+            {{ port_cfg.name | upper }} BUNKER SALES — NOWCAST VS OFFICIAL
           {% else %}
             {{ port_cfg.name | upper }} BUNKER SALES{% if port_cfg.data_frequency == 'quarterly' %} (QUARTERLY){% endif %}
             {% if not port_cfg.data_source %}<span class="text-muted" style="font-size:var(--t-xs)"> — AIS only, no official data</span>{% endif %}
@@ -98,6 +98,13 @@
         </div>
       </div>
       <div id="demand-chart" style="min-height:380px;width:100%;"></div>
+      {% if port_cfg.has_registry %}
+      <div class="text-muted mt-1" style="font-size:var(--t-xs);opacity:0.85;">
+        Grey = official sales. Green/red = current-month calibrated nowcast (forecast of the
+        official series; out-of-sample mean error ~4%). AIS bunkering activity is a leading
+        input under evaluation; see the track record below.
+      </div>
+      {% endif %}
     </div>
   </div>
   <div class="card" style="min-width:0;">
@@ -143,6 +150,25 @@
         </tbody>
       </table>
     </div>
+  </div>
+</div>
+
+{# ── AIS signal test — is bunkering data earning its place in the nowcast? ────── #}
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <span class="section-label mb-0">AIS SIGNAL — IS BUNKERING DATA EARNING ITS PLACE?</span>
+      <span class="text-muted" style="font-size:var(--t-xs);" id="ais-proj"></span>
+    </div>
+    <div class="d-flex align-items-baseline gap-2 flex-wrap mb-2">
+      <span id="ais-verdict" style="font-size:1.15rem;font-weight:700;">—</span>
+      <span id="ais-conf" class="badge rounded-pill" style="display:none;"></span>
+    </div>
+    <div class="text-muted mb-3" id="ais-detail" style="font-size:var(--t-sm);"></div>
+    <div class="ais-bar" style="height:6px;border-radius:3px;background:rgba(139,148,158,0.18);overflow:hidden;max-width:420px;">
+      <div id="ais-bar-fill" style="height:100%;width:0;background:#58a6ff;transition:width .4s;"></div>
+    </div>
+    <div class="text-muted mt-1" style="font-size:var(--t-xs);" id="ais-bar-label">accruing about one month-pair per month</div>
   </div>
 </div>
 {% endif %}
@@ -211,7 +237,7 @@ async function refreshKPIs() {
         ? Math.round(proj / 1000).toLocaleString() + '<span class="unit">k mt</span>'
         : '—';
       document.getElementById('hero-proj-sub').textContent =
-        `day ${demand.days_elapsed}/${demand.days_in_month} · ${demand.event_count} events detected`;
+        `calibrated forecast · ${demand.event_count} AIS events tracked`;
 
       // Verdict pill (% vs seasonal average)
       const card    = document.getElementById('hero-nowcast');
@@ -248,9 +274,9 @@ async function refreshKPIs() {
       document.getElementById('kv-official-sub').textContent = demand.last_official_month
         ? demand.last_official_month.slice(0, 7) : 'most recent MPA figure';
 
-      // Detected MTD
-      document.getElementById('kv-mtd').textContent = fmtK(demand.estimated_mt);
-      document.getElementById('kv-mtd-sub').textContent = `${demand.event_count} events`;
+      // AIS activity MTD (event count — NOT the retired duration-tonnage)
+      document.getElementById('kv-mtd').textContent = (demand.event_count || 0).toLocaleString();
+      document.getElementById('kv-mtd-sub').textContent = 'bunkering events this month';
 
       // Live / active
       document.getElementById('kv-live').textContent = stats.live_positions.toLocaleString();
@@ -312,7 +338,8 @@ async function refreshAccuracy() {
   biasEl.style.color = (bias == null) ? '' : (bias >= 0 ? 'var(--neg)' : 'var(--accent)');
 
   document.getElementById('acc-note').textContent = data && data.error
-    ? 'track record pending integration' : '';
+    ? 'track record pending integration'
+    : (data && data.method === 'calibrated_nowcast_oos' ? 'out-of-sample backtest · calibrated nowcast' : '');
 
   if (!rows.length) {
     tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">No graded months yet — calls are scored once official figures publish.</td></tr>';
@@ -339,6 +366,43 @@ async function refreshAccuracy() {
   }).join('');
 }
 
+// ── AIS signal test — does bunkering activity beat the forecast yet? ───────────
+async function refreshAisSignal() {
+  const vEl = document.getElementById('ais-verdict');
+  if (!vEl) return;
+  let d;
+  try { d = await fetch(`/api/ais-signal?port=${CURRENT_PORT}`).then(r => r.json()); }
+  catch(e) { return; }
+
+  const conf = d.confidence || 'none';
+  const colour = { none:'#8b949e', directional:'#58a6ff', low:'#d29922',
+                   tentative:'#3fb950', confident:'#3fb950' }[conf] || '#8b949e';
+
+  vEl.textContent = d.verdict || '—';
+  vEl.style.color = colour;
+
+  const confEl = document.getElementById('ais-conf');
+  if (conf && conf !== 'none') {
+    confEl.style.display = '';
+    confEl.textContent = conf;
+    confEl.style.background = colour + '22';   // #RRGGBBAA translucent
+    confEl.style.color = colour;
+    confEl.style.border = '1px solid ' + colour;
+  } else { confEl.style.display = 'none'; }
+
+  document.getElementById('ais-detail').textContent = d.detail || '';
+
+  const n = d.n_usable_pairs || 0;
+  const fill = document.getElementById('ais-bar-fill');
+  fill.style.width = Math.min(100, Math.round(n / 6 * 100)) + '%';
+  fill.style.background = colour;
+  document.getElementById('ais-bar-label').textContent =
+    `${n} / 6 usable month-pairs toward a tentative verdict`;
+
+  const proj = document.getElementById('ais-proj');
+  if (d.tentative_at) proj.textContent = `tentative ~${d.tentative_at} · confident ~${d.confident_at}`;
+}
+
 // ── Event / vessel feed ──────────────────────────────────────────────────────
 async function refreshEventFeed() {
   if (PORT_CFG.has_registry) {
@@ -358,8 +422,8 @@ async function refreshEventFeed() {
         <div class="event-feed-item d-flex" style="margin-bottom:0.65rem;padding-bottom:0.65rem;border-bottom:1px solid rgba(48,54,61,0.5);">
           ${statusDot}
           <div>
-            <div style="color:#e6edf3;font-weight:500;">${ev.bunker_name || ev.bunker_imo || 'Unknown bunker'}</div>
-            <div style="color:#8b949e;">alongside ${ev.recipient_name || ev.recipient_mmsi || 'unknown'}</div>
+            <div style="color:#e6edf3;font-weight:500;">${escapeHtml(ev.bunker_name || ev.bunker_imo || 'Unknown bunker')}</div>
+            <div style="color:#8b949e;">alongside ${escapeHtml(ev.recipient_name || ev.recipient_mmsi || 'unknown')}</div>
             <div style="color:#8b949e;font-size:0.72rem;">${dur}${mt ? ' · ' + mt : ''} · ${ts}</div>
           </div>
         </div>`;
@@ -376,7 +440,7 @@ async function refreshEventFeed() {
         const sogStr = parseFloat(v.sog || 0).toFixed(1) + ' kt';
         return `
           <div class="d-flex justify-content-between" style="margin-bottom:0.45rem;font-size:0.78rem;border-bottom:1px solid rgba(48,54,61,0.3);padding-bottom:0.4rem;">
-            <span style="color:#e6edf3;font-weight:500;">${v.name || v.mmsi}</span>
+            <span style="color:#e6edf3;font-weight:500;">${escapeHtml(v.name || v.mmsi)}</span>
             <span style="color:#8b949e;">${sogStr}</span>
           </div>`;
       }).join('') || '<div style="color:#8b949e;padding:1rem 0;">No vessels in range</div>';
@@ -419,9 +483,11 @@ document.querySelectorAll('#ops-tabs button[data-bs-toggle="pill"]').forEach(b =
 refreshKPIs();
 refreshEventFeed();
 refreshAccuracy();
+refreshAisSignal();
 setInterval(refreshKPIs, 30_000);
 setInterval(refreshEventFeed, 20_000);
 setInterval(refreshAccuracy, 300_000);
+setInterval(refreshAisSignal, 600_000);
 setInterval(() => {
   loadDemandCharts();
 }, 120_000);

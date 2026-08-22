@@ -9,7 +9,7 @@ import calendar
 from datetime import date, datetime, timedelta, timezone
 
 import db
-from config import DEFAULT_PUMP_RATE_MT_MIN, PORTS
+from config import BUNKER_PRICES_DB, DEFAULT_PUMP_RATE_MT_MIN, PORTS
 
 
 def _db_port(port: str) -> str:
@@ -63,7 +63,7 @@ def running_demand_estimate(port: str = "singapore",
     if has_registry:
         # Quality-filter / dedup are applied inside aggregate_closed_event_mt and
         # are gated by config flags (legacy aggregate when flags default to off).
-        from event_detector import _avg_pump_rate, aggregate_closed_event_mt
+        from event_detector import _avg_pump_rate, aggregate_closed_event_mt, capped_tonnage_mt
         event_count, estimated_mt = aggregate_closed_event_mt(port, year, month)
 
         open_rows = db.query("""
@@ -80,7 +80,9 @@ def running_demand_estimate(port: str = "singapore",
                 if hasattr(start, "replace"):
                     start = start.replace(tzinfo=timezone.utc)
                 duration_min = max(1, int((now - start).total_seconds() / 60))
-                open_mt += duration_min * pump_rate
+                # Same physical cap as closed events (EVENT_MAX_DURATION_MIN):
+                # a long-running open event must not inflate the live nowcast.
+                open_mt += capped_tonnage_mt(duration_min, pump_rate)
 
     total_so_far = estimated_mt + open_mt
     projected = (total_so_far / days_elapsed * days_in_month) if (has_registry and days_elapsed > 0 and total_so_far > 0) else None
@@ -105,7 +107,7 @@ def running_demand_estimate(port: str = "singapore",
     if projected and seasonal and seasonal > 0:
         pct = round((projected / seasonal - 1) * 100, 1)
 
-    return {
+    result = {
         "port": port,
         "has_registry": has_registry,
         "year": year,
@@ -121,6 +123,25 @@ def running_demand_estimate(port: str = "singapore",
         "last_official_month": str(last_official_month) if last_official_month else None,
         "pct_vs_seasonal": pct,
     }
+
+    # Calibrated-nowcast override (OFF by default). When enabled, the validated
+    # forecast of the official series supersedes the duration-based projection
+    # for the headline figure. Flag off -> result is returned byte-identical.
+    from config import USE_CALIBRATED_NOWCAST
+    if USE_CALIBRATED_NOWCAST:
+        try:
+            import nowcast_model
+            nc = nowcast_model.calibrated_nowcast(port, year, month)
+            result["estimate_method"] = "calibrated_nowcast"
+            result["nowcast_level_mt"] = nc["level_mt"]
+            result["nowcast_ais_adjustment_pct"] = nc["ais_adjustment_pct"]
+            result["projected_month_mt"] = nc["nowcast_mt"]
+            if seasonal and seasonal > 0:
+                result["pct_vs_seasonal"] = round((nc["nowcast_mt"] / seasonal - 1) * 100, 1)
+        except Exception:
+            result["estimate_method"] = "duration_engine"  # safe fallback
+
+    return result
 
 
 # ── Month-end snapshot ─────────────────────────────────────────────────────────
@@ -268,6 +289,42 @@ def refresh_provisional_estimates(port: str = "singapore") -> int:
     return refreshed
 
 
+def _gap_month_nowcasts(port: str, last_official: date | None) -> list[tuple[date, float]]:
+    """Calibrated nowcasts for completed months the authority hasn't published
+    yet — every month after `last_official` up to (not including) the current
+    month. These months would otherwise render as holes in the charts: the
+    official bar doesn't exist yet, the legacy provisional snapshots are
+    suppressed while USE_CALIBRATED_NOWCAST is on, and the live forecast only
+    covers the current month. Each entry drops out as its official lands.
+    """
+    from config import USE_CALIBRATED_NOWCAST
+    port_cfg = PORTS.get(port, {})
+    if not (USE_CALIBRATED_NOWCAST
+            and port_cfg.get("has_registry")
+            and port_cfg.get("data_frequency", "monthly") == "monthly"
+            and last_official is not None):
+        return []
+
+    import nowcast_model
+    cur_month = date.today().replace(day=1)
+    out: list[tuple[date, float]] = []
+    y, m = last_official.year, last_official.month
+    for _ in range(6):  # cap: a stale official feed must not paint a wall of nowcast bars
+        m += 1
+        if m > 12:
+            y, m = y + 1, 1
+        d = date(y, m, 1)
+        if d >= cur_month:
+            break
+        try:
+            mt = nowcast_model.calibrated_nowcast(port, y, m).get("nowcast_mt")
+        except Exception:
+            continue
+        if mt:
+            out.append((d, float(mt)))
+    return out
+
+
 # ── Charts ─────────────────────────────────────────────────────────────────────
 
 def _monthly_avg_price(port: str, grade: str = "VLSFO") -> dict[str, float]:
@@ -289,7 +346,7 @@ def _monthly_avg_price(port: str, grade: str = "VLSFO") -> dict[str, float]:
     if not sb_port:
         return {}
     try:
-        conn = sqlite3.connect("/root/bunkervision/bunker_prices.db")
+        conn = sqlite3.connect(BUNKER_PRICES_DB)
         rows = conn.execute("""
             SELECT strftime('%Y-%m', date) AS ym, AVG(price_usd)
             FROM bunker_prices
@@ -408,7 +465,10 @@ def demand_chart_data(port: str = "singapore", window: str = "3y") -> dict:
         WHERE port = ?
         ORDER BY year, month
     """, [port])
-    if est_rows:
+    from config import USE_CALIBRATED_NOWCAST
+    if est_rows and not USE_CALIBRATED_NOWCAST:
+        # Legacy duration-engine "Provisional" amber bars. Suppressed once the
+        # calibrated nowcast is the headline (those snapshots are the retired model).
         est_x, est_y, est_hover, est_bar_text = [], [], [], []
         for yr, mo, mt, pct in est_rows:
             label = f"{yr}-{mo:02d}"
@@ -438,6 +498,39 @@ def demand_chart_data(port: str = "singapore", window: str = "3y") -> dict:
                 hovertemplate="%{customdata}<extra></extra>",
                 customdata=est_hover,
             ))
+
+    # Completed-but-unpublished months (amber "Nowcast") — e.g. June once July
+    # starts, until MPA publishes the June official ~6 weeks later.
+    last_official = None
+    if not df.empty:
+        last_official = pd.Timestamp(df["month"].max()).date().replace(day=1)
+    gap_nowcasts = _gap_month_nowcasts(port, last_official)
+    if gap_nowcasts:
+        nc_x, nc_y, nc_hover, nc_text = [], [], [], []
+        for d, mt in gap_nowcasts:
+            seasonal = seasonal_avg_monthly_volume(d.month, port)
+            pct_str = (f"{(mt / seasonal - 1) * 100:+.1f}% vs seasonal"
+                       if seasonal and seasonal > 0 else "")
+            month_name = f"{_MONTH_NAMES[d.month - 1]} {d.year}"
+            nc_x.append(f"{d.year}-{d.month:02d}")
+            nc_y.append(mt / 1e6)
+            nc_hover.append(
+                f"<b>{month_name}</b><br>Nowcast: {mt/1e6:.2f} Mt"
+                + (f"<br>{pct_str}" if pct_str else "")
+            )
+            nc_text.append(f"{mt/1e6:.2f} Mt" + (f"<br>{pct_str}" if pct_str else ""))
+        fig.add_trace(go.Bar(
+            x=nc_x,
+            y=nc_y,
+            name="Nowcast",
+            marker_color="#e3b341",
+            opacity=0.75,
+            width=_BAR_W_MS,
+            text=nc_text,
+            textposition="outside",
+            hovertemplate="%{customdata}<extra></extra>",
+            customdata=nc_hover,
+        ))
 
     # Current-month live forecast (green/red)
     has_registry = port_cfg.get("has_registry", False)
@@ -527,15 +620,26 @@ def demand_sparkline_data(port: str = "singapore") -> dict:
         fill="tozeroy", fillcolor="rgba(88,166,255,0.10)",
         hovertemplate="%{x}: %{y:.2f} Mt<extra></extra>",
     ))
+
+    # Forecast tail: nowcasts for completed-but-unpublished months, then the
+    # live current-month forecast — so the dotted line has no hole after rollover.
+    last_m = df["month"].max()
+    last_official = (last_m.date() if hasattr(last_m, "date") else last_m).replace(day=1)
+    gap = _gap_month_nowcasts(port, last_official)
+    fx = [d.strftime("%Y-%m") for d, _ in gap]
+    fy = [mt / 1e6 for _, mt in gap]
     if fc:
+        fx.append(date.today().strftime("%Y-%m"))
+        fy.append(fc / 1e6)
+    if fx:
         colour = "#3fb950" if (est.get("pct_vs_seasonal") or 0) >= 0 else "#f85149"
         fig.add_trace(go.Scatter(
-            x=[xs[-1], date.today().strftime("%Y-%m")], y=[ys[-1], fc / 1e6],
+            x=[xs[-1]] + fx, y=[ys[-1]] + fy,
             mode="lines+markers", line=dict(color=colour, width=2, dash="dot"),
             marker=dict(size=6, color=colour),
             hovertemplate="%{x} forecast: %{y:.2f} Mt<extra></extra>",
         ))
-    vals = ys + ([fc / 1e6] if fc else [])
+    vals = ys + fy
     fig.update_yaxes(range=[min(vals) * 0.9, max(vals) * 1.05])
     return fig.to_dict()
 

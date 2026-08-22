@@ -5,27 +5,77 @@ Run:  python app.py
 from __future__ import annotations
 
 import concurrent.futures
+import hmac
 import json
 import re
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import requests as _requests
 
 from flask import Flask, Response, jsonify, render_template, request, stream_with_context
+from loguru import logger
 
 import db
 import demand_model
 import prices_data
 from ais_client import get_live_positions, position_queue, start_ais_thread
-from config import DEBUG, FLASK_SECRET, HOST, MAP_CENTRE, MAPBOX_TOKEN, PORT, PORTS
+from config import ADMIN_TOKEN, DEBUG, FLASK_SECRET, HOST, MAP_CENTRE, MAPBOX_TOKEN, PORT, PORTS
 from event_detector import start_detector_thread
 from mpa_scraper import load_all_port_stats, seed_vessels_from_json
 
 app = Flask(__name__)
 app.secret_key = FLASK_SECRET
+
+
+# ── Admin auth ─────────────────────────────────────────────────────────────────
+# Shared-token gate for the admin page and every mutating endpoint. The token is
+# supplied via the `X-Admin-Token` header or a `?token=` query parameter.
+# If ADMIN_TOKEN is not configured, protected endpoints FAIL CLOSED (503) rather
+# than running unauthenticated. Read-only GET endpoints and the public dashboard
+# stay open.
+
+# Paths protected regardless of HTTP method (in addition to every POST route).
+_PROTECTED_PATHS = {
+    "/admin",
+    "/api/registry/remove",
+    "/api/registry/add",
+    "/api/registry/operators",
+    "/api/refresh_port_stats",
+    "/api/registry/global_bunkering_scan",
+    "/api/registry/vf_check",
+}
+
+
+def _is_protected_request() -> bool:
+    if request.method == "POST":
+        return True
+    # Match on path suffix so the gate holds whether or not nginx strips the
+    # "/bunkervision" location prefix before proxying (request.path may be
+    # "/admin" or "/bunkervision/admin" depending on proxy_pass config).
+    path = request.path
+    return any(path == p or path.endswith(p) for p in _PROTECTED_PATHS)
+
+
+@app.before_request
+def _require_admin_token():
+    if not _is_protected_request():
+        return None
+    if not ADMIN_TOKEN:
+        return jsonify({
+            "error": "admin endpoints disabled: ADMIN_TOKEN is not set on the server. "
+                     "Set the ADMIN_TOKEN environment variable and restart to enable "
+                     "the admin page and mutating endpoints (fail-closed by design)."
+        }), 503
+    supplied = request.headers.get("X-Admin-Token") or request.args.get("token") or ""
+    if not hmac.compare_digest(supplied, ADMIN_TOKEN):
+        return jsonify({
+            "error": "unauthorized: supply the admin token via the X-Admin-Token "
+                     "header or ?token= query parameter"
+        }), 401
+    return None
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
@@ -321,16 +371,54 @@ def api_stats():
 def api_accuracy():
     """Model track-record for a port. Defensive: the `accuracy` module is owned by
     another agent and may not exist yet — never crash, return empty shape on error."""
+    port = request.args.get("port", "singapore")
     try:
+        from config import USE_CALIBRATED_NOWCAST
+        if USE_CALIBRATED_NOWCAST:
+            # Headline is the calibrated nowcast → show ITS out-of-sample record,
+            # not the retired duration engine's. Same shape, so the panel is unchanged.
+            import backtest_nowcast
+            return jsonify(backtest_nowcast.nowcast_accuracy_report(port))
         import accuracy
-        return jsonify(accuracy.accuracy_report(request.args.get("port", "singapore")))
+        return jsonify(accuracy.accuracy_report(port))
     except Exception as e:
-        return jsonify({
-            "port": request.args.get("port", "singapore"),
-            "rows": [],
-            "summary": {},
-            "error": str(e),
-        })
+        return jsonify({"port": port, "rows": [], "summary": {}, "error": str(e)})
+
+
+@app.route("/api/accuracy-backtest")
+def api_accuracy_backtest():
+    """SHADOW endpoint (experimental): out-of-sample backtest of the calibrated
+    nowcast vs the seasonal baseline vs the old duration engine. Read-only;
+    computed live; touches no sacred table and is independent of the live
+    /api/accuracy track record. Defensive — never crashes the app."""
+    port = request.args.get("port", "singapore")
+    try:
+        import backtest_nowcast
+        return jsonify(backtest_nowcast.oos_table(port))
+    except Exception as e:
+        return jsonify({"port": port, "rows": [], "summary": {}, "error": str(e)})
+
+
+@app.route("/backtest")
+def backtest_page():
+    """SHADOW comparison page (experimental). Renders the nowcast backtest panel.
+    Not linked from the primary nav; visible only to those who know the URL."""
+    port = _get_port()
+    return render_template("backtest.html", ports=PORTS, current_port=port,
+                           port_cfg=PORTS[port])
+
+
+@app.route("/api/ais-signal")
+def api_ais_signal():
+    """AIS-vs-residual signal test verdict — is bunkering activity earning its place
+    in the nowcast yet? Read-only, defensive, accrues monthly."""
+    port = request.args.get("port", "singapore")
+    try:
+        import ais_signal
+        return jsonify(ais_signal.signal_test(port))
+    except Exception as e:
+        return jsonify({"port": port, "verdict": "unavailable", "confidence": "none",
+                        "n_usable_pairs": 0, "n_months_ais": 0, "detail": str(e)})
 
 
 @app.route("/api/registry/candidates")
@@ -933,9 +1021,11 @@ def api_global_bunkering_scan():
                     "completed_at": datetime.now(timezone.utc).isoformat(),
                 })
         except Exception as exc:
-            logger.error(f"Global bunkering scan failed: {exc}")
+            # Reset the scan state FIRST so a failure can never leave status
+            # stuck at "running" (which would 409 every future scan forever).
             with _global_scan_lock:
                 _global_scan_state.update({"status": "error", "error": str(exc)})
+            logger.error(f"Global bunkering scan failed: {exc}")
 
     threading.Thread(target=_run, daemon=True).start()
     return jsonify({"status": "started", "dry_run": dry_run, "cat_codes": cat_codes})
@@ -1097,9 +1187,8 @@ def api_refresh_registry():
 
 @app.route("/api/refresh_port_stats", methods=["POST"])
 def api_refresh_port_stats():
-    from mpa_scraper import load_all_port_stats
-    load_all_port_stats()
-    return jsonify({"status": "ok"})
+    graded = refresh_port_stats_and_grade()
+    return jsonify({"status": "ok", "graded": graded})
 
 
 # ── Pricing ────────────────────────────────────────────────────────────────────
@@ -1194,6 +1283,44 @@ def stream():
 
 # ── Startup ────────────────────────────────────────────────────────────────────
 
+def refresh_port_stats_and_grade() -> int:
+    """Pull the latest official port figures, then re-grade saved estimates.
+
+    Grading is otherwise lazy (only when the accuracy panel is rendered), so a
+    newly published month — e.g. May once Stackhero updates — would not enter the
+    persistent `estimate_grades` track record until someone opened the panel.
+    Calling this after every stats refresh closes that gap: the moment an official
+    figure lands, the month is graded automatically. Returns the number of months
+    graded (0 on any failure; never raises — the accuracy module is owned
+    separately and must never crash the refresh path).
+    """
+    from loguru import logger
+    load_all_port_stats()
+    try:
+        import accuracy
+        graded = accuracy.grade_on_refresh()  # all ports
+        logger.info(f"Auto-graded {graded} month(s) after port-stats refresh")
+        return graded
+    except Exception as e:
+        logger.warning(f"Auto-grade after refresh failed (non-fatal): {e}")
+        return 0
+
+
+def _snapshot_ais_signal() -> None:
+    """Durably log each port's previous-month AIS clean-stem features for the
+    AIS-vs-residual signal test. Defensive; never raises into the scheduler."""
+    from loguru import logger
+    try:
+        import ais_signal
+        for p in PORTS:
+            try:
+                ais_signal.snapshot_previous_month(p)
+            except Exception:
+                pass
+    except Exception as e:
+        logger.warning(f"AIS-signal snapshot failed (non-fatal): {e}")
+
+
 def _initial_load():
     """Seed vessels and load all port stats at startup (runs in background thread)."""
     time.sleep(2)
@@ -1203,7 +1330,7 @@ def _initial_load():
     except Exception as e:
         logger.error(f"Vessel seed failed: {e}")
     try:
-        load_all_port_stats()
+        refresh_port_stats_and_grade()
     except Exception as e:
         logger.warning(f"Port stats load failed (non-fatal): {e}")
 
@@ -1234,12 +1361,16 @@ def start_background() -> None:
     from apscheduler.schedulers.background import BackgroundScheduler
     sched = BackgroundScheduler()
     sched.add_job(seed_vessels_from_json, "interval", weeks=1)
-    sched.add_job(load_all_port_stats,    "interval", days=1)
+    sched.add_job(refresh_port_stats_and_grade, "interval", days=1)
     # Snapshot previous month's estimate on the 1st of each month at 06:00 UTC
     sched.add_job(
         lambda: [demand_model.snapshot_previous_month_if_missing(p) for p in PORTS],
         "cron", day=1, hour=6, minute=0,
     )
+    # Durably log the previous month's AIS clean-stem features for the
+    # AIS-vs-residual signal test (ais_signal.signal_test). Additive log table;
+    # accrues evidence on whether AIS beats the seasonality+trend forecast.
+    sched.add_job(_snapshot_ais_signal, "cron", day=1, hour=6, minute=15)
     # Re-snapshot still-provisional months daily so the amber bar tracks
     # late-closing events until the official figure is published (then frozen).
     sched.add_job(

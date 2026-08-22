@@ -1,8 +1,9 @@
 """
 prices_data.py — Multi-source bunker & cargo price queries.
 
-Reads from the SQLite DB at /root/bunkervision/bunker_prices.db,
-which is written by three independent scrapers:
+Reads from the SQLite DB at $BUNKER_PRICES_DB (default
+/root/bunkervision/bunker_prices.db), which is written by three independent
+scrapers:
   - integr8_scraper.py   → bunker_prices table, source='integr8'
   - sb_scraper.py        → bunker_prices table, source='shipandbunker'
   - quantum_scraper.py   → quantum_prices table (QCIntel assessments)
@@ -14,7 +15,9 @@ import threading
 from datetime import date, timedelta
 from pathlib import Path
 
-PRICE_DB = Path("/root/bunkervision/bunker_prices.db")
+from config import BUNKER_PRICES_DB
+
+PRICE_DB = Path(BUNKER_PRICES_DB)
 
 _lock = threading.Lock()
 

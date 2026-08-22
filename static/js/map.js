@@ -24,6 +24,18 @@ const STATE_RADIUS = {
 const vessels = {};
 let map, popup;
 
+// Escape AIS-derived strings (names, IMO/MMSI fields) before injecting into
+// popup HTML — AIS broadcast data is attacker-controlled (stored XSS vector).
+// Mirrors the shared helper in base.html so this file stays self-contained.
+function escapeHtml(v) {
+  return String(v ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function initMap() {
   // Build style inline — avoids any external style JSON dependency
   const tileStyle = MAPBOX_TOKEN
@@ -188,12 +200,12 @@ function onVesselClick(e) {
     ? `<div class="vessel-popup-row">Draught <span>${parseFloat(p.draught).toFixed(1)} m</span></div>`
     : '';
   popup.setLngLat(e.lngLat).setHTML(`
-    <div class="vessel-popup-name">${p.name || 'Unknown vessel'}</div>
-    <div class="vessel-popup-row">IMO <span>${p.imo || '—'}</span></div>
-    <div class="vessel-popup-row">MMSI <span>${p.mmsi}</span></div>
+    <div class="vessel-popup-name">${escapeHtml(p.name || 'Unknown vessel')}</div>
+    <div class="vessel-popup-row">IMO <span>${escapeHtml(p.imo || '—')}</span></div>
+    <div class="vessel-popup-row">MMSI <span>${escapeHtml(p.mmsi)}</span></div>
     <div class="vessel-popup-row">SOG <span>${sogKt} kt</span></div>
     ${draughtLine}
-    <div class="vessel-popup-row">Status <span style="color:${stateCol}">${stateLabel}</span></div>
+    <div class="vessel-popup-row">Status <span style="color:${stateCol}">${escapeHtml(stateLabel)}</span></div>
   `).addTo(map);
 }
 
