@@ -10,6 +10,12 @@
 #
 # Run from a machine with SSH access to the droplet, from the repo root:
 #   bash deploy/deploy_hardening.sh
+#
+# Ships whatever is checked out locally (no `git checkout` inside this script) —
+# always run it from an up-to-date `main` checkout. `main` is the branch that
+# ships; see README.md#branch-convention. (Historical note: this script and its
+# name predate that convention — it was written against a branch called
+# `hardening`, since merged into `main`.)
 set -euo pipefail
 
 SERVER="${SERVER:-root@165.232.110.29}"
