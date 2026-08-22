@@ -1,0 +1,3 @@
+month,ev_all,ev_ge30,ev_clean_30m_6h,mt_clean_30m_6h,mt_long_ge6h,mt_all,distinct_bunkers,distinct_recipients,avg_dur,med_mt
+2026-04-01,7576,891.0,393.0,273504.0,2121353.5,2423375.5,198,790,91.4,3.5
+2026-05-01,12458,1397.0,674.0,475608.0,2824734.5,3346976.5,230,1162,76.8,3.5

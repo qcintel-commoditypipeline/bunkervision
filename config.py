@@ -26,6 +26,16 @@ DEBUG        = os.getenv("FLASK_DEBUG", "0") == "1"
 HOST         = os.getenv("HOST", "127.0.0.1")
 PORT         = int(os.getenv("PORT", "5100"))
 
+# Shared admin token guarding /admin and every mutating API endpoint (checked
+# via the X-Admin-Token header or a ?token= query param). If UNSET, protected
+# endpoints return 503 — they fail CLOSED rather than running unauthenticated.
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
+
+# SQLite DB written by the independent price scrapers (integr8 / shipandbunker /
+# quantum). Configurable so dev machines aren't hardwired to the VPS path; the
+# default preserves production behaviour unchanged.
+BUNKER_PRICES_DB = os.getenv("BUNKER_PRICES_DB", "/root/bunkervision/bunker_prices.db")
+
 # Event detection thresholds
 STOP_SOG_KT          = 0.5    # knots — vessel considered stopped below this
 STOP_MIN_DURATION    = 10     # minutes stopped before we open a candidate event
@@ -44,9 +54,13 @@ AIS_KEEP_HOURS       = 48     # hours of raw positions to retain in DB
 DEFAULT_PUMP_RATE_MT_MIN = 3.5
 
 # ── Methodology flags ───────────────────────────────────────────────────────────
-# CRITICAL: every flag below DEFAULTS TO CURRENT (legacy) BEHAVIOUR so that
-# merely deploying this code does NOT move the live May number. Flip a flag
-# (and only then) to opt into the improved methodology.
+# MOST flags below default to legacy behaviour so that merely deploying this
+# code does not move the live number; flip a flag (and only then) to opt into
+# the improved methodology. Deliberate EXCEPTIONS that are active by default:
+#   * EVENT_QUALITY_FILTER_ENABLED = True  (enabled 2026-05-31; total ~-1.6%)
+#   * EVENT_MAX_DURATION_MIN — physically caps the tonnage duration term at
+#     16h, which LOWERS tonnage for any event longer than the cap (multi-day
+#     "events" no longer book physically impossible stems).
 
 # Event-quality filtering: when True, events shorter than MIN_BUNKER_EVENT_MIN
 # are EXCLUDED from VOLUME aggregation (they are still detected/logged/counted
@@ -59,6 +73,17 @@ EVENT_QUALITY_FILTER_ENABLED = True
 # Minimum plausible bunkering duration (minutes) for an event to contribute to
 # VOLUME aggregation when EVENT_QUALITY_FILTER_ENABLED is True.
 MIN_BUNKER_EVENT_MIN = 30
+
+# Physical cap (minutes) on the DURATION TERM used to convert an event into
+# tonnage: estimated_mt = min(duration_min, EVENT_MAX_DURATION_MIN) * pump_rate.
+# Real Singapore bunkering runs ~3-12h; time alongside beyond 16h is AIS gaps
+# or a barge parked next to the same ship, not continuous pumping — without a
+# cap an 18-day "event" books a physically impossible ~90k mt stem. Events
+# LONGER than the cap still close exactly as before (true duration_min is
+# stored and event detection is unchanged); only the tonnage term is capped.
+# NOTE: unlike most flags this is ACTIVE IMMEDIATELY and changes tonnage for
+# events longer than the cap.
+EVENT_MAX_DURATION_MIN = 960   # 16 hours
 
 # Collapse obvious re-openings / double-counts of the SAME bunker<->recipient
 # pair whose gap (next.start - prev.end) is below DEDUP_GAP_MIN minutes into a
@@ -93,6 +118,34 @@ PARTIAL_MONTH_GUARD_ENABLED = False
 # fraction of the calendar month (first event near day 1, last event near
 # month-end). Used only when PARTIAL_MONTH_GUARD_ENABLED is True.
 MONTH_COVERAGE_MIN_FRACTION = 0.9
+
+# ── Calibrated nowcast (salvage prototype, 2026-06) ─────────────────────────
+# A demand nowcast that replaces the broken duration×rate "measurement" with a
+# calibrated forecast of the OFFICIAL monthly series (76 months of MPA history,
+# strong seasonality+trend), optionally nudged by an AIS leading-indicator that
+# earns weight only as graded months accrue. See nowcast_model.py + docs/.
+#
+#   nowcast = level_model(month) × (1 + α · z_ais)
+#
+# The level model (log-space damped-ETS/Theta blend) was selected out-of-sample
+# in the 2026-06 bake-off: MAE 4.07% vs 8.35% for the old seasonal baseline,
+# near-zero bias. The AIS term is a small, shrinkage-regularised deviation nudge:
+# with only ~2 months of AIS history α≈0 today, so the nowcast == the level model.
+# OFF by default — flipping this changes /api/demand; the shadow backtest panel
+# (/api/accuracy-backtest) compares it to the live model without touching either.
+USE_CALIBRATED_NOWCAST = True
+
+# AIS deviation earns weight only after this many GRADED months of AIS history
+# (out-of-sample evidence that the signal helps). Below this, α = 0.
+NOWCAST_AIS_MIN_GRADED_MONTHS = 6
+
+# Hard cap on the AIS nudge magnitude (fraction of level). Even fully "earned",
+# the AIS term may move the nowcast at most ±10% — it informs, never dominates.
+NOWCAST_AIS_MAX_ALPHA = 0.10
+
+# Minimum months of official history before the level model will fit; below this
+# it falls back to a trend-adjusted seasonal mean.
+NOWCAST_LEVEL_MIN_TRAIN = 30
 
 # MPA URLs
 MPA_BUNKER_STATS_URL    = "https://www.mpa.gov.sg/maritime-singapore/what-we-do/develop-singapore-as-an-international-maritime-centre/port-statistics/bunkering"

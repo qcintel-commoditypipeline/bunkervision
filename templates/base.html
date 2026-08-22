@@ -129,6 +129,18 @@
 <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
 
 <script>
+// Escape externally-derived strings (AIS vessel names, Equasis/VesselFinder
+// fields, user input) before interpolating into innerHTML. AIS names are
+// attacker-controlled broadcast data and must be treated as hostile.
+function escapeHtml(v) {
+  return String(v ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const PLY_CFG = {
   responsive: true,
   displayModeBar: false,
