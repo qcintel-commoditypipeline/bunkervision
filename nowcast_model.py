@@ -192,19 +192,21 @@ def _ais_monthly_clean(port: str, before_year: int, before_month: int) -> pd.Dat
 
 
 def ais_deviation(port: str, year: int, month: int) -> tuple[float, int]:
-    """Standardized deviation of the clean-stem rate from its trailing baseline.
-    Returns (z, n_history_months). z is clipped to ±3σ. With too little history
-    (the current reality), returns (0.0, n)."""
+    """Relative deviation of the clean-stem rate from its trailing baseline.
+    Returns (dev, n_history_months). dev = (current - baseline) / baseline,
+    clipped to ±3. Returns (0.0, n) when there is no prior month to baseline on.
+    The gating on whether this deviation should influence the nowcast is handled
+    separately by ais_signal.live_coupling (verdict-based, not count-based)."""
     hist = _ais_monthly_clean(port, year, month)
     n = len(hist)
-    if n < NOWCAST_AIS_MIN_GRADED_MONTHS:
+    if n < 2:
         return 0.0, n
     vals = hist["clean_stems"].astype(float).to_numpy()
-    base, sd = float(vals[:-1].mean()), float(vals[:-1].std(ddof=1))
-    if sd <= 0:
+    base = float(vals[:-1].mean())
+    if base <= 0:
         return 0.0, n
-    z = (float(vals[-1]) - base) / sd
-    return float(np.clip(z, -3.0, 3.0)), n
+    dev = (float(vals[-1]) - base) / base
+    return float(np.clip(dev, -3.0, 3.0)), n
 
 
 def ais_alpha(n_graded_ais_months: int) -> float:
@@ -220,17 +222,29 @@ def ais_alpha(n_graded_ais_months: int) -> float:
 # ── Public entry point ──────────────────────────────────────────────────────
 
 def calibrated_nowcast(port: str, year: int, month: int) -> dict:
-    """Full calibrated nowcast for (port, year, month). Pure read; no writes."""
+    """Full calibrated nowcast for (port, year, month). Pure read; no writes.
+
+    AIS is engaged ONLY when ais_signal.live_coupling confirms a SIGNAL verdict
+    (Pearson r > 0, p < 0.10, positive OOS skill). Until then alpha = 0 and the
+    nowcast equals the level model. The coupling coefficient (sign + magnitude) is
+    fit from the actual residuals by live_coupling, not from elapsed month count.
+    """
+    import ais_signal as _sig  # lazy import — ais_signal imports nowcast_model at top level
+
     series = official_series(port, year, month)
     level = level_forecast(series, month)
-    z, n_ais = ais_deviation(port, year, month)
-    alpha = ais_alpha(n_ais)
+
+    coupling = _sig.live_coupling(port)
+    alpha = coupling["alpha_hat"]  # 0.0 unless signal_test verdict == "SIGNAL"
+
+    z, n_ais = ais_deviation(port, year, month) if alpha != 0.0 else (0.0, coupling["n_pairs"])
     nowcast = level * (1.0 + alpha * z)
     return {
         "port": port, "year": year, "month": month,
         "level_mt": round(level, 0),
         "ais_z": round(z, 3), "ais_alpha": round(alpha, 4),
         "ais_history_months": n_ais,
+        "ais_signal_verdict": coupling["verdict"],
         "nowcast_mt": round(nowcast, 0),
         "ais_adjustment_pct": round(alpha * z * 100.0, 2),
     }
