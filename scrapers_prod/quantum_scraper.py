@@ -39,7 +39,7 @@ import os
 
 DB_PATH   = Path(__file__).parent / "bunker_prices.db"
 API_BASE  = "https://www.qcintel.com/api/"
-API_TOKEN = os.getenv("QCINTEL_API_TOKEN", "0P1eWf4H6uXmI4TGCdV18jTgcsJxeUhk")
+API_TOKEN = os.getenv("QCINTEL_API_TOKEN")
 
 # Assessment codes: prime_code → human description
 # The -SPO suffix in the user codes = "SPO" laycan (spot)
@@ -87,6 +87,10 @@ def init_db(conn: sqlite3.Connection) -> None:
         );
         CREATE INDEX IF NOT EXISTS qp_code_date
             ON quantum_prices(prime_code, date);
+        CREATE TABLE IF NOT EXISTS quantum_no_data_dates (
+            date        TEXT PRIMARY KEY,
+            checked_at  TEXT NOT NULL
+        );
     """)
     conn.commit()
 
@@ -107,6 +111,8 @@ def _fetch(url: str, retries: int = 3) -> bytes:
 
 
 def fetch_date(target: date) -> list[dict]:
+    if not API_TOKEN:
+        raise RuntimeError("QCINTEL_API_TOKEN is not set")
     codes = ",".join(ASSESSMENTS.keys())
     url = (
         f"{API_BASE}?action=Prices&format=json&product=ENER"
@@ -116,6 +122,8 @@ def fetch_date(target: date) -> list[dict]:
 
 
 def fetch_range_csv(from_date: date, to_date: date) -> str:
+    if not API_TOKEN:
+        raise RuntimeError("QCINTEL_API_TOKEN is not set")
     codes = ",".join(ASSESSMENTS.keys())
     url = (
         f"{API_BASE}?action=Prices&format=csv&CSVDelimiter=%09&product=ENER"
@@ -207,8 +215,32 @@ def _trading_days(start: date, end: date):
 
 
 def dates_in_db(conn: sqlite3.Connection) -> set[date]:
-    rows = conn.execute("SELECT DISTINCT date FROM quantum_prices").fetchall()
+    rows = conn.execute(
+        "SELECT DISTINCT date FROM quantum_prices "
+        "UNION SELECT date FROM quantum_no_data_dates"
+    ).fetchall()
     return {date.fromisoformat(r[0]) for r in rows}
+
+
+def mark_confirmed_no_data(conn: sqlite3.Connection, dates: list[date] | set[date]) -> int:
+    """Remember old dates for which the API returned successfully but no rows.
+
+    Recent empty days are deliberately not passed here: publication can lag and
+    they should be retried.  This ledger is for durable closures such as market
+    holidays, which otherwise become permanent daily API misses.
+    """
+    rows = [
+        (d.isoformat(), datetime.now(timezone.utc).isoformat())
+        for d in sorted(set(dates))
+    ]
+    if not rows:
+        return 0
+    conn.executemany(
+        "INSERT OR REPLACE INTO quantum_no_data_dates (date, checked_at) VALUES (?,?)",
+        rows,
+    )
+    conn.commit()
+    return len(rows)
 
 
 def smart_sync(conn: sqlite3.Connection, force_backfill: bool = False) -> None:
@@ -219,11 +251,20 @@ def smart_sync(conn: sqlite3.Connection, force_backfill: bool = False) -> None:
 
     existing = dates_in_db(conn)
 
+    retry_cutoff = today - timedelta(days=7)
+
     if force_backfill or not existing:
         log.info("Backfill from %s to %s", BACKFILL_FROM, yesterday)
         text = fetch_range_csv(BACKFILL_FROM, yesterday)
         n = insert_csv(conn, text)
         log.info("Backfill inserted %d rows", n)
+        actual = dates_in_db(conn)
+        closed = {
+            d for d in _trading_days(BACKFILL_FROM, yesterday)
+            if d < retry_cutoff and d not in actual
+        }
+        if closed:
+            log.info("Recorded %d confirmed old no-data dates", mark_confirmed_no_data(conn, closed))
         return
 
     expected = set(_trading_days(BACKFILL_FROM, yesterday))
@@ -238,12 +279,18 @@ def smart_sync(conn: sqlite3.Connection, force_backfill: bool = False) -> None:
         text = fetch_range_csv(missing[0], missing[-1])
         n = insert_csv(conn, text)
         log.info("Inserted %d rows", n)
+        actual = dates_in_db(conn)
+        closed = {d for d in missing if d < retry_cutoff and d not in actual}
+        if closed:
+            log.info("Recorded %d confirmed old no-data dates", mark_confirmed_no_data(conn, closed))
     else:
         for d in missing:
             log.info("Pulling %s …", d)
             records = fetch_date(d)
             n = insert_json(conn, records)
             log.info("  %d rows", n)
+            if n == 0 and d < retry_cutoff:
+                mark_confirmed_no_data(conn, {d})
 
 
 # ── Summary ───────────────────────────────────────────────────────────────────
