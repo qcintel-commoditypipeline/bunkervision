@@ -251,6 +251,46 @@ def signal_test(port: str = "singapore") -> dict:
     return res
 
 
+def live_coupling(port: str = "singapore") -> dict:
+    """Gated AIS coupling for the live nowcast — verdict + fitted alpha.
+
+    Returns ``is_signal=True`` only when ``signal_test`` confirms a SIGNAL
+    verdict (Pearson r > 0, p < 0.10, positive OOS skill). When the verdict
+    is INSUFFICIENT / DIRECTIONAL / EARLY READ / NO SIGNAL, ``alpha_hat``
+    is always 0.0 — safe default, no branch logic required by caller.
+
+    When SIGNAL is confirmed, ``alpha_hat`` is the OLS slope of the level-model
+    residual regressed on ``ais_dev`` (the relative clean-stem deviation) over
+    all usable pairs, clipped to ``[-NOWCAST_AIS_MAX_ALPHA, +NOWCAST_AIS_MAX_ALPHA]``.
+    Sign is fit from data — a negative true correlation produces a negative alpha.
+    """
+    from config import NOWCAST_AIS_MAX_ALPHA
+
+    st = signal_test(port)
+    verdict = st["verdict"]
+    n = st["n_usable_pairs"]
+    is_signal = verdict.startswith("SIGNAL")
+
+    alpha_hat = 0.0
+    if is_signal:
+        pairs = build_pairs(port)
+        usable = (
+            pairs[pairs["good"]].dropna(subset=["ais_dev_pct", "residual_pct"])
+            if not pairs.empty else pairs
+        )
+        if len(usable) >= 2:
+            g = usable["ais_dev_pct"].to_numpy(float) / 100.0
+            r = usable["residual_pct"].to_numpy(float) / 100.0
+            var_g = float(np.var(g))
+            if var_g > 0:
+                alpha_raw = float(np.cov(g, r)[0, 1] / var_g)
+                alpha_hat = float(
+                    np.clip(alpha_raw, -NOWCAST_AIS_MAX_ALPHA, NOWCAST_AIS_MAX_ALPHA)
+                )
+
+    return {"is_signal": is_signal, "alpha_hat": alpha_hat, "n_pairs": n, "verdict": verdict}
+
+
 def _print(port: str = "singapore") -> None:
     r = signal_test(port)
     W = 74
